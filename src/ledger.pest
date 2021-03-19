@@ -1,0 +1,63 @@
+ledger = _{ SOI ~ ((option | statement | comment) ~ NEWLINE*)+ ~ EOI }
+
+option = {
+	"option" ~ SPC* ~ string ~ SPC* ~ string
+}
+
+statement = { (line_statement | transaction) }
+
+comment = _{ SPC* ~ ";" ~ (!"\n" ~ ANY)* }
+
+line_statement = {
+	custom_statement
+    | open_statement
+    | commodity_statement
+    | price_statement
+    | pad_statement
+    | balance_statement
+}
+	custom_statement = { date ~ SPC* ~ "custom" ~ SPC* ~ string+ }
+	open_statement = { date ~ SPC* ~ "open" ~ SPC* ~ account }
+    commodity_statement = { date ~ SPC* ~ "commodity" ~ SPC* ~ currency }
+    price_statement = {
+    	date ~ SPC* ~ "price" ~ SPC* ~ currency ~ SPC* ~ amount
+    }
+    pad_statement = { date ~ SPC* ~ "pad" ~ SPC* ~ account }
+    balance_statement = {
+    	date ~ SPC* ~ "balance" ~ SPC* ~ account ~ SPC* ~ amount
+    }
+
+transaction = { trx_header ~ trx_list }
+	trx_header = { date ~ SPC* ~ trx_state ~ SPC* ~ string }
+	trx_list = { (NEWLINE ~ comment* ~ account_statement){2,} }
+	trx_state = { ("*" | "!") }
+	account_statement = {
+    	SPC* ~ account ~ (SPC+ ~ amount?)? ~ comment*
+    }
+
+date = @{ year ~ "-" ~ month ~ "-" ~ day_of_month }
+	year = { ASCII_NONZERO_DIGIT ~ ASCII_DIGIT{,3} }
+	month = { ASCII_DIGIT{2} }
+	day_of_month = { ASCII_DIGIT{2} }
+
+
+account = @{ account_segment ~ (":" ~ account_segment)* }
+	account_segment = _{ UPPERCASE_LETTER ~ ASCII_ALPHANUMERIC* }
+
+amount = { amount_value ~ WHITE_SPACE* ~ currency }
+	amount_value = @{ "-"? ~ number }
+    number = @{ integral ~ fraction? }
+    integral = { "0" | (ASCII_NONZERO_DIGIT ~ ASCII_DIGIT*) }
+    fraction = { "." ~ ASCII_DIGIT+  }
+	currency = { UPPERCASE_LETTER+ }
+
+
+string = ${ "\"" ~ string_content ~ "\"" }
+	string_content = @{ char* }
+	char = {
+    	!("\"" | "\\") ~ ANY
+    	| "\\" ~ ("\"" | "\\" | "/" | "b" | "f" | "n" | "r" | "t")
+    	| "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})
+	}
+
+SPC = _{ (" " | "\t") }
