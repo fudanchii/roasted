@@ -8,7 +8,4 @@ pub struct LedgerParser {
 }
 
 impl LedgerParser {
-    pub fn try_into(self) -> Result<Ledger, Error<Rule>> {
-        Ok(Ledger)
-    }
 }
