@@ -3,4 +3,7 @@ extern crate pest;
 extern crate pest_derive;
 
 pub mod ledger;
-pub mod parser;
+mod statement;
+mod parser;
+
+pub use parser::parse;

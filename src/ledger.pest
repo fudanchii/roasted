@@ -1,20 +1,19 @@
-ledger = _{ SOI ~ ((option | statement | comment) ~ NEWLINE*)+ ~ EOI }
+ledger = _{ SOI ~ ((option | statement | comment) ~ NL*)+ ~ EOI }
 
 option = {
 	"option" ~ SPC* ~ string ~ SPC* ~ string
 }
 
-statement = { (line_statement | transaction) }
-
 comment = _{ SPC* ~ ";" ~ (!"\n" ~ ANY)* }
 
-line_statement = {
+statement = {
 	custom_statement
     | open_statement
     | commodity_statement
     | price_statement
     | pad_statement
     | balance_statement
+    | transaction
 }
 	custom_statement = { date ~ SPC* ~ "custom" ~ SPC* ~ string+ }
 	open_statement = { date ~ SPC* ~ "open" ~ SPC* ~ account }
@@ -22,18 +21,20 @@ line_statement = {
     price_statement = {
     	date ~ SPC* ~ "price" ~ SPC* ~ currency ~ SPC* ~ amount
     }
-    pad_statement = { date ~ SPC* ~ "pad" ~ SPC* ~ account }
+    pad_statement = { date ~ SPC* ~ "pad" ~ SPC* ~ account ~ SPC* ~ account }
     balance_statement = {
     	date ~ SPC* ~ "balance" ~ SPC* ~ account ~ SPC* ~ amount
     }
 
-transaction = { trx_header ~ trx_list }
-	trx_header = { date ~ SPC* ~ trx_state ~ SPC* ~ string }
-	trx_list = { (NEWLINE ~ comment* ~ account_statement){2,} }
+transaction = { date ~ SPC* ~ trx_header ~ trx_list }
+	trx_header = { trx_state ~ SPC* ~ string ~ (SPC* ~ string)? }
+	trx_list = { (NL ~ comment* ~ account_statement){2,} }
 	trx_state = { ("*" | "!") }
 	account_statement = {
-    	SPC* ~ account ~ (SPC+ ~ amount?)? ~ comment*
+    	SPC* ~ account ~ (SPC+ ~ amount_with_price?)? ~ comment*
     }
+    amount_with_price = { amount ~ (SPC* ~ "@" ~ SPC* ~ price)? }
+    price = { amount }
 
 date = @{ year ~ "-" ~ month ~ "-" ~ day_of_month }
 	year = { ASCII_NONZERO_DIGIT ~ ASCII_DIGIT{,3} }
@@ -42,7 +43,7 @@ date = @{ year ~ "-" ~ month ~ "-" ~ day_of_month }
 
 
 account = @{ account_segment ~ (":" ~ account_segment)* }
-	account_segment = _{ UPPERCASE_LETTER ~ ASCII_ALPHANUMERIC* }
+	account_segment = _{ UPPERCASE_LETTER ~ (ASCII_ALPHANUMERIC | "-")* }
 
 amount = { amount_value ~ WHITE_SPACE* ~ currency }
 	amount_value = @{ "-"? ~ number }
@@ -61,3 +62,4 @@ string = ${ "\"" ~ string_content ~ "\"" }
 	}
 
 SPC = _{ (" " | "\t") }
+NL = _{ ("\r\n" | "\r" | "\n") }
