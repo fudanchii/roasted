@@ -15,7 +15,7 @@ statement = {
     | balance_statement
     | transaction
 }
-	custom_statement = { date ~ SPC* ~ "custom" ~ SPC* ~ string+ }
+	custom_statement = { date ~ SPC* ~ "custom" ~ (SPC* ~ string)+ }
 	open_statement = { date ~ SPC* ~ "open" ~ SPC* ~ account }
     commodity_statement = { date ~ SPC* ~ "commodity" ~ SPC* ~ currency }
     price_statement = {

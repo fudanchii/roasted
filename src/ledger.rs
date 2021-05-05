@@ -78,15 +78,12 @@ impl Ledger {
     }
 
     pub fn process_statement(&mut self, statement: Statement) {
+        let mut daybook = self.find_or_insert_at(date);
         match statement {
             Statement::Custom(date, args) => {
-                let date = NaiveDate::parse_from_str(date, "%Y-%m-%d").unwrap();
-                let mut daybook = self.find_or_insert_at(date);
                 daybook.custom.push(args.iter().map(|elt| elt.to_string()).collect());
             },
             Statement::OpenAccount(date, account) => {
-                let date = NaiveDate::parse_from_str(date, "%Y-%m-%d").unwrap();
-                let mut daybook = self.find_or_insert_at(date);
                 self.accounts.push(self.account_base_name(account));
                 daybook.opened_accounts.push(self.account_type(account, self.accounts.length() - 1))
             }

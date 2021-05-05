@@ -26,11 +26,34 @@ impl From<Pair<Rule>> for Statement {
 }
 
 impl Statement {
-    fn into_custom_statement(statement: Pair<Rule>) -> Self {
+    fn into_statement(tag: &str, statement: Pair<Rule>) -> Self {
         let pairs = statement.into_inner();
+        let mut tokens = Vec::new();
+
         for pair in pairs {
-            match pair.as_rule() {
-            }
+            let token = match pair.as_rule() {
+                Rule::date => date.as_str(),
+                Rule::string => inner_str!(pair),
+                _ => unreachable!(),
+            };
+            tokens.push(token);
         }
+
+        let date = NaiveDate::parse_from_str(tokens[0], "%Y-%m-%d").unwrap();
+
+        match tag {
+            "custom" => Self::Custom(date, tokens[1..].to_vec()),
+            "open" => Self::OpenAccount(date, tokens[1]),
+            "pad" => Self::Pad(date,)
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn into_custom_statement(statement: Pair<Rule>) -> Self {
+        into_statement("custom", statement)
+    }
+
+    pub fn into_open_statement(statement: Pair<Rule>) -> Self {
+        into_statement("open", statement)
     }
 }
