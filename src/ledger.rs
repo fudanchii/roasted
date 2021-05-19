@@ -1,5 +1,6 @@
-use std::collections::{BTreeMap, HashMap};
+use crate::statement::Statement;
 use chrono::naive::NaiveDate;
+use std::collections::{BTreeMap, HashMap};
 
 pub enum TransactionState {
     Settled,
@@ -30,7 +31,8 @@ pub struct BalanceAssertion {
 }
 
 pub struct PadTransaction {
-    account: AccountType,
+    left_account: AccountType,
+    right_account: AccountType,
     position: Option<f64>,
 }
 
@@ -77,27 +79,5 @@ impl Ledger {
         self.options.insert(key.to_string(), val.to_string());
     }
 
-    pub fn process_statement(&mut self, statement: Statement) {
-        let mut daybook = self.find_or_insert_at(date);
-        match statement {
-            Statement::Custom(date, args) => {
-                daybook.custom.push(args.iter().map(|elt| elt.to_string()).collect());
-            },
-            Statement::OpenAccount(date, account) => {
-                self.accounts.push(self.account_base_name(account));
-                daybook.opened_accounts.push(self.account_type(account, self.accounts.length() - 1))
-            }
-        }
-    }
-
-    fn find_or_insert_at(&mut self, date: NaiveDate) -> &mut DayBook {
-        if let Some(daybook) = self.transactions.get_mut(&date) {
-            return daybook;
-        } else {
-            let daybook = DayBook::new();
-            self.transactions.insert(date.clone(), daybook);
-            let mut daybook = self.transactions.get_mut(&date).unwrap();
-            return &mut daybook;
-        }
-    }
+    pub fn process_statement(&mut self, statement: Statement) {}
 }

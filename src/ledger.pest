@@ -9,6 +9,7 @@ comment = _{ SPC* ~ ";" ~ (!"\n" ~ ANY)* }
 statement = {
 	custom_statement
     | open_statement
+    | close_statement
     | commodity_statement
     | price_statement
     | pad_statement
@@ -17,6 +18,7 @@ statement = {
 }
 	custom_statement = { date ~ SPC* ~ "custom" ~ (SPC* ~ string)+ }
 	open_statement = { date ~ SPC* ~ "open" ~ SPC* ~ account }
+	close_statement = { date ~ SPC* ~ "close" ~ SPC* ~ account }
     commodity_statement = { date ~ SPC* ~ "commodity" ~ SPC* ~ currency }
     price_statement = {
     	date ~ SPC* ~ "price" ~ SPC* ~ currency ~ SPC* ~ amount
@@ -45,7 +47,7 @@ date = @{ year ~ "-" ~ month ~ "-" ~ day_of_month }
 account = @{ account_segment ~ (":" ~ account_segment)* }
 	account_segment = _{ UPPERCASE_LETTER ~ (ASCII_ALPHANUMERIC | "-")* }
 
-amount = { amount_value ~ WHITE_SPACE* ~ currency }
+amount = { amount_value ~ SPC* ~ currency }
 	amount_value = @{ "-"? ~ number }
     number = @{ integral ~ fraction? }
     integral = { "0" | (ASCII_NONZERO_DIGIT ~ ASCII_DIGIT*) }

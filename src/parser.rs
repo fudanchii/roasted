@@ -1,7 +1,6 @@
-use crate::{statement::Statement, ledger::Ledger};
+use crate::ledger::Ledger;
 use pest::error::Error;
 use pest::Parser;
-use pest::iterators::Pair;
 
 #[derive(Parser)]
 #[grammar = "ledger.pest"]
@@ -22,12 +21,12 @@ pub fn parse(input: &str) -> Result<(), Error<Rule>> {
     for statement in statements {
         match statement.as_rule() {
             Rule::option => {
-                let option = statement.into_inner(); // "<key>" "<value>"
+                let mut option = statement.into_inner(); // "<key>" "<value>"
                 let key = inner_str!(option.next().unwrap()); // <key>
                 let val = inner_str!(option.next().unwrap()); // <value>
                 ledger.set_option(key, val);
-            },
-            Rule::statement => ledger.process_statement(Statement::from(statement)),
+            }
+            Rule::statement => ledger.process_statement(statement.into()),
             _ => unreachable!(),
         }
     }
