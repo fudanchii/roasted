@@ -1,17 +1,11 @@
 use crate::ledger::Ledger;
+use crate::inner_str;
 use pest::error::Error;
 use pest::Parser;
 
 #[derive(Parser)]
 #[grammar = "ledger.pest"]
 pub struct LedgerParser;
-
-#[macro_export]
-macro_rules! inner_str {
-    ($i:expr) => {
-        $i.into_inner().next().unwrap().as_str()
-    };
-}
 
 pub fn parse(input: &str) -> Result<(), Error<Rule>> {
     let statements = LedgerParser::parse(Rule::ledger, input)?;
