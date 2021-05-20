@@ -12,9 +12,9 @@ pub enum TransactionState {
 
 #[derive(Debug, PartialEq)]
 pub enum AccountType {
-    Asset(usize),
-    Expense(usize),
-    Liability(usize),
+    Assets(usize),
+    Expenses(usize),
+    Liabilities(usize),
     Income(usize),
     Equity(usize),
 }
@@ -83,6 +83,26 @@ impl AccountStore {
         self.labels.get(idx)
     }
 
+    pub fn get_full_name(&self, account: AccountType) -> Option<String> {
+        match account {
+            AccountType::Assets(idx) => self.labels.get(idx).map(|label| format!("Assets{}", label)),
+            AccountType::Expenses(idx) => self
+                .labels
+                .get(idx)
+                .map(|label| format!("Expenses{}", label)),
+            AccountType::Liabilities(idx) => self
+                .labels
+                .get(idx)
+                .map(|label| format!("Liabilities{}", label)),
+            AccountType::Income(idx) => {
+                self.labels.get(idx).map(|label| format!("Income{}", label))
+            }
+            AccountType::Equity(idx) => {
+                self.labels.get(idx).map(|label| format!("Equity{}", label))
+            }
+        }
+    }
+
     pub fn put(&mut self, accstr: &str) -> AccountType {
         let mut pairs =
             LedgerParser::parse(Rule::account, accstr).unwrap_or_else(|e| panic!("{}", e));
@@ -100,12 +120,12 @@ impl AccountStore {
         };
 
         match account_prefix {
-            "Asset" => AccountType::Asset(idx),
-            "Expense" => AccountType::Expense(idx),
-            "Liability" => AccountType::Liability(idx),
+            "Assets" => AccountType::Assets(idx),
+            "Expenses" => AccountType::Expenses(idx),
+            "Liabilities" => AccountType::Liabilities(idx),
             "Income" => AccountType::Income(idx),
             "Equity" => AccountType::Equity(idx),
-            _ => unreachable!(),
+            _ => panic!("Unknown account type: {}", account_prefix),
         }
     }
 }
@@ -213,11 +233,18 @@ mod tests {
     fn test_open_account() {
         let mut ledger = Ledger::new();
         let date = NaiveDate::from_ymd(2021, 10, 25);
-        ledger.process_statement(Statement::OpenAccount(date, "Asset:Bank"));
+        ledger.process_statement(Statement::OpenAccount(date, "Assets:Bank:Jawir"));
         assert_eq!(
             ledger.get_at(&date).unwrap().get_opened_accounts()[0],
-            AccountType::Asset(0)
+            AccountType::Assets(0)
         );
-        assert_eq!(ledger.accounts.get(0).unwrap(), ":Bank");
+        assert_eq!(ledger.accounts.get(0).unwrap(), ":Bank:Jawir");
+        assert_eq!(
+            ledger
+                .accounts
+                .get_full_name(AccountType::Assets(0))
+                .unwrap(),
+            "Assets:Bank:Jawir"
+        );
     }
 }
