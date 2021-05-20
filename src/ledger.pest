@@ -44,8 +44,9 @@ date = @{ year ~ "-" ~ month ~ "-" ~ day_of_month }
 	day_of_month = { ASCII_DIGIT{2} }
 
 
-account = @{ account_segment ~ (":" ~ account_segment)* }
-	account_segment = _{ UPPERCASE_LETTER ~ (ASCII_ALPHANUMERIC | "-")* }
+account = { account_segment ~ account_suffix }
+	account_segment = { UPPERCASE_LETTER ~ (ASCII_ALPHANUMERIC | "-")* }
+	account_suffix = @{ (":" ~ account_segment)+ }
 
 amount = { amount_value ~ SPC* ~ currency }
 	amount_value = @{ "-"? ~ number }
