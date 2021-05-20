@@ -175,7 +175,7 @@ mod tests {
             r#"2021-04-01 * "Gubuk mang Engking" "Splurge @ diner"
                  Asset:Cash
                  Expense:Dining              50 USD
-            "#
+            "#,
         )
         .unwrap_or_else(|e| panic!("{}", e));
         let statement = Statement::from(ast.next().unwrap());

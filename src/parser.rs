@@ -1,5 +1,5 @@
-use crate::ledger::Ledger;
 use crate::inner_str;
+use crate::ledger::Ledger;
 use pest::error::Error;
 use pest::Parser;
 
@@ -7,7 +7,7 @@ use pest::Parser;
 #[grammar = "ledger.pest"]
 pub struct LedgerParser;
 
-pub fn parse(input: &str) -> Result<(), Error<Rule>> {
+pub fn parse(input: &str) -> Result<Ledger, Error<Rule>> {
     let statements = LedgerParser::parse(Rule::ledger, input)?;
 
     let mut ledger = Ledger::new();
@@ -24,5 +24,5 @@ pub fn parse(input: &str) -> Result<(), Error<Rule>> {
             _ => unreachable!(),
         }
     }
-    Ok(())
+    Ok(ledger)
 }
