@@ -249,11 +249,14 @@ mod tests {
     #[test]
     fn test_open_account() {
         let mut ledger = Ledger::new();
-        let date = NaiveDate::from_ymd(2021, 10, 25);
-        ledger.process_statement(Statement::OpenAccount(date, "Assets:Bank:Jawir"));
+        let date1 = NaiveDate::from_ymd(2021, 10, 25);
+        let date2 = NaiveDate::from_ymd(2021, 10, 28);
+        let date_query = NaiveDate::from_ymd(2021, 11, 1);
+        ledger.process_statement(Statement::OpenAccount(date1, "Assets:Bank:Jawir"));
+        ledger.process_statement(Statement::OpenAccount(date2, "Expenses:Dining"));
         assert_eq!(
-            ledger.accounts.get_upto(&date),
-            vec![AccountType::Assets(0)]
+            ledger.accounts.get_upto(&date_query),
+            vec![AccountType::Assets(0), AccountType::Expenses(1)]
         );
         assert_eq!(
             ledger
