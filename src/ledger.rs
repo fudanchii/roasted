@@ -5,18 +5,18 @@ use pest::Parser;
 use std::cmp::PartialEq;
 use std::collections::{BTreeMap, HashMap};
 
-pub enum TransactionState {
-    Settled,
-    Unsettled,
-}
-
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum AccountType {
     Assets(usize),
     Expenses(usize),
     Liabilities(usize),
     Income(usize),
     Equity(usize),
+}
+
+pub enum TransactionState {
+    Settled,
+    Unsettled,
 }
 
 pub struct Transaction {
@@ -42,8 +42,6 @@ pub struct PadTransaction {
 
 pub struct DayBook {
     custom: Vec<Vec<String>>,
-    opened_accounts: Vec<AccountType>,
-    closed_accounts: Vec<AccountType>,
     pads: Vec<PadTransaction>,
     balance_asserts: Vec<BalanceAssertion>,
     transactions: Vec<Transaction>,
@@ -53,8 +51,6 @@ impl DayBook {
     pub fn new() -> DayBook {
         DayBook {
             custom: Vec::new(),
-            opened_accounts: Vec::new(),
-            closed_accounts: Vec::new(),
             pads: Vec::new(),
             balance_asserts: Vec::new(),
             transactions: Vec::new(),
@@ -64,28 +60,50 @@ impl DayBook {
     pub fn get_custom(&self) -> &Vec<Vec<String>> {
         &self.custom
     }
+}
 
-    pub fn get_opened_accounts(&self) -> &Vec<AccountType> {
-        &self.opened_accounts
-    }
+#[derive(Default)]
+pub struct AccountActivity {
+    opened_accounts: Vec<AccountType>,
+    closed_accounts: Vec<AccountType>,
 }
 
 pub struct AccountStore {
     labels: Vec<String>,
+    activities: BTreeMap<NaiveDate, AccountActivity>,
 }
 
 impl AccountStore {
     pub fn new() -> Self {
-        AccountStore { labels: Vec::new() }
+        AccountStore {
+            labels: Vec::new(),
+            activities: BTreeMap::new(),
+        }
     }
 
-    pub fn get(&self, idx: usize) -> Option<&String> {
-        self.labels.get(idx)
+    // XXX: this could be a trait?
+    pub fn keys_upto(&self, date: &NaiveDate) -> Vec<&NaiveDate> {
+        self.activities.keys().filter(|&k| k <= date).collect()
+    }
+
+    pub fn get_upto(&self, date: &NaiveDate) -> Vec<AccountType> {
+        let keys = self.keys_upto(date);
+        keys.iter()
+            .flat_map(|&keydate| {
+                self.activities
+                    .get(keydate)
+                    .unwrap()
+                    .opened_accounts
+                    .clone()
+            })
+            .collect()
     }
 
     pub fn get_full_name(&self, account: AccountType) -> Option<String> {
         match account {
-            AccountType::Assets(idx) => self.labels.get(idx).map(|label| format!("Assets{}", label)),
+            AccountType::Assets(idx) => {
+                self.labels.get(idx).map(|label| format!("Assets{}", label))
+            }
             AccountType::Expenses(idx) => self
                 .labels
                 .get(idx)
@@ -103,7 +121,7 @@ impl AccountStore {
         }
     }
 
-    pub fn put(&mut self, accstr: &str) -> AccountType {
+    pub fn put(&mut self, date: NaiveDate, accstr: &str) {
         let mut pairs =
             LedgerParser::parse(Rule::account, accstr).unwrap_or_else(|e| panic!("{}", e));
         let mut segments = pairs.next().unwrap().into_inner();
@@ -119,13 +137,23 @@ impl AccountStore {
             }
         };
 
-        match account_prefix {
+        let account = match account_prefix {
             "Assets" => AccountType::Assets(idx),
             "Expenses" => AccountType::Expenses(idx),
             "Liabilities" => AccountType::Liabilities(idx),
             "Income" => AccountType::Income(idx),
             "Equity" => AccountType::Equity(idx),
             _ => panic!("Unknown account type: {}", account_prefix),
+        };
+
+        let account_activities = self.activities.get_mut(&date);
+        match account_activities {
+            Some(activity) => activity.opened_accounts.push(account),
+            None => {
+                let mut activity: AccountActivity = Default::default();
+                activity.opened_accounts.push(account);
+                self.activities.insert(date, activity);
+            }
         }
     }
 }
@@ -190,18 +218,7 @@ impl Ledger {
     }
 
     fn process_open_account(&mut self, date: NaiveDate, accstr: &str) {
-        let wrap = self.transactions.get_mut(&date);
-        let account = self.accounts.put(accstr);
-        match wrap {
-            Some(book) => {
-                book.opened_accounts.push(account);
-            }
-            None => {
-                let mut book = DayBook::new();
-                book.opened_accounts.push(account);
-                self.transactions.insert(date, book);
-            }
-        }
+        self.accounts.put(date, accstr);
     }
 }
 
@@ -235,10 +252,9 @@ mod tests {
         let date = NaiveDate::from_ymd(2021, 10, 25);
         ledger.process_statement(Statement::OpenAccount(date, "Assets:Bank:Jawir"));
         assert_eq!(
-            ledger.get_at(&date).unwrap().get_opened_accounts()[0],
-            AccountType::Assets(0)
+            ledger.accounts.get_upto(&date),
+            vec![AccountType::Assets(0)]
         );
-        assert_eq!(ledger.accounts.get(0).unwrap(), ":Bank:Jawir");
         assert_eq!(
             ledger
                 .accounts
