@@ -62,41 +62,61 @@ impl DayBook {
     }
 }
 
-#[derive(Default)]
-pub struct AccountActivity {
-    opened_accounts: Vec<AccountType>,
-    closed_accounts: Vec<AccountType>,
+pub struct AccountActivities {
+    account_id: usize,
+    opened_at: NaiveDate,
+    closed_at: Option<NaiveDate>,
 }
 
 pub struct AccountStore {
     labels: Vec<String>,
-    activities: BTreeMap<NaiveDate, AccountActivity>,
+    accounts: Vec<AccountType>,
+    account_activities: Vec<AccountActivities>,
+    opened_upto_index: BTreeMap<NaiveDate, Vec<usize>>,
+    closed_at_index: BTreeMap<NaiveDate, Vec<usize>>,
+    need_indexing: bool,
 }
 
 impl AccountStore {
     pub fn new() -> Self {
         AccountStore {
             labels: Vec::new(),
-            activities: BTreeMap::new(),
+            accounts: Vec::new(),
+            account_activities: Vec::new(),
+            opened_upto_index: BTreeMap::new(),
+            closed_at_index: BTreeMap::new(),
+            need_indexing: true,
         }
     }
 
-    // XXX: this could be a trait?
-    pub fn keys_upto(&self, date: &NaiveDate) -> Vec<&NaiveDate> {
-        self.activities.keys().filter(|&k| k <= date).collect()
+    pub fn mapped_key(&self, date: &NaiveDate) -> Option<NaiveDate> {
+        self.opened_upto_index
+            .get(date)
+            .map(|_| date.clone())
+            .or_else(|| {
+                self.opened_upto_index
+                    .keys()
+                    .filter(|&key| key <= date)
+                    .cloned()
+                    .last()
+            })
     }
 
-    pub fn get_upto(&self, date: &NaiveDate) -> Vec<AccountType> {
-        let keys = self.keys_upto(date);
-        keys.iter()
-            .flat_map(|&keydate| {
-                self.activities
-                    .get(keydate)
-                    .unwrap()
-                    .opened_accounts
-                    .clone()
-            })
-            .collect()
+    pub fn get_upto(&self, date: &NaiveDate) -> Result<Vec<AccountType>, LedgerError<()>> {
+        if self.need_indexing {
+            return Err(LedgerError::new("need to call build_index before querying"));
+        }
+
+        let date_idx = self
+            .mapped_key(date)
+            .ok_or(LedgerError::new("given date is out of range"))?;
+        Ok(self
+            .opened_upto_index
+            .get(&date_idx)
+            .unwrap()
+            .iter()
+            .map(|&idx| self.accounts[idx].clone())
+            .collect())
     }
 
     pub fn get_full_name(&self, account: AccountType) -> Option<String> {
@@ -146,19 +166,73 @@ impl AccountStore {
             _ => panic!("Unknown account type: {}", account_prefix),
         };
 
-        let account_activities = self.activities.get_mut(&date);
-        match account_activities {
-            Some(activity) => activity.opened_accounts.push(account),
+        let account_idx_candidate = self.accounts.iter().position(|a| a == &account);
+        let account_idx = match account_idx_candidate {
             None => {
-                let mut activity: AccountActivity = Default::default();
-                activity.opened_accounts.push(account);
-                self.activities.insert(date, activity);
+                self.accounts.push(account);
+                self.accounts.len() - 1
+            }
+            Some(idx) => idx,
+        };
+
+        self.account_activities.push(AccountActivities {
+            account_id: idx,
+            opened_at: date,
+            closed_at: None,
+        });
+
+        match self.opened_upto_index.get_mut(&date) {
+            None => {
+                self.opened_upto_index.insert(date, vec![account_idx]);
+            }
+            Some(index) => {
+                index.push(account_idx);
             }
         }
+
+        self.need_indexing = true;
+    }
+
+    pub fn build_index(&mut self) -> Result<(), LedgerError<AccountType>> {
+        let indexes: Vec<NaiveDate> = self.opened_upto_index.keys().cloned().collect();
+        let mut account_buffer: Vec<usize> = Vec::new();
+        for date in indexes.iter() {
+            let entry = self.opened_upto_index.get_mut(date).unwrap();
+            for idx in entry.clone() {
+                if account_buffer.contains(&idx) {
+                    return Err(LedgerError::new("duplicated account")
+                        .with_context(self.accounts[idx].clone()));
+                } else {
+                    account_buffer.push(idx);
+                }
+            }
+            if let Some(closed_entry) = self.closed_at_index.get(date) {
+                account_buffer = account_buffer
+                    .iter()
+                    .filter(|account| !closed_entry.contains(account))
+                    .cloned()
+                    .collect();
+            };
+            entry.clear();
+            entry.append(&mut account_buffer.clone());
+        }
+        self.need_indexing = false;
+        Ok(())
     }
 }
 
-pub struct LedgerError;
+#[derive(Debug)]
+pub struct LedgerError<T: std::fmt::Debug>(&'static str, T);
+
+impl LedgerError<()> {
+    pub fn new(msg: &'static str) -> LedgerError<()> {
+        LedgerError(msg, ())
+    }
+
+    pub fn with_context<U: std::fmt::Debug>(self, ctx: U) -> LedgerError<U> {
+        LedgerError(self.0, ctx)
+    }
+}
 
 pub struct Ledger {
     accounts: AccountStore,
@@ -199,6 +273,10 @@ impl Ledger {
 
     pub fn get_at(&self, date: &NaiveDate) -> Option<&DayBook> {
         self.transactions.get(date)
+    }
+
+    pub fn build_index(&mut self) {
+        self.accounts.build_index().unwrap();
     }
 
     fn process_custom_statement(&mut self, date: NaiveDate, args: Vec<&str>) {
@@ -254,8 +332,9 @@ mod tests {
         let date_query = NaiveDate::from_ymd(2021, 11, 1);
         ledger.process_statement(Statement::OpenAccount(date1, "Assets:Bank:Jawir"));
         ledger.process_statement(Statement::OpenAccount(date2, "Expenses:Dining"));
+        ledger.build_index();
         assert_eq!(
-            ledger.accounts.get_upto(&date_query),
+            ledger.accounts.get_upto(&date_query).unwrap(),
             vec![AccountType::Assets(0), AccountType::Expenses(1)]
         );
         assert_eq!(
