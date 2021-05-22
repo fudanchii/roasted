@@ -141,7 +141,7 @@ impl AccountStore {
         }
     }
 
-    pub fn put(&mut self, date: NaiveDate, accstr: &str) {
+    pub fn open(&mut self, date: NaiveDate, accstr: &str) {
         let mut pairs =
             LedgerParser::parse(Rule::account, accstr).unwrap_or_else(|e| panic!("{}", e));
         let mut segments = pairs.next().unwrap().into_inner();
@@ -193,6 +193,58 @@ impl AccountStore {
         self.need_indexing = true;
     }
 
+    pub fn close(&mut self, date: NaiveDate, accstr: &str) -> Result<(), LedgerError<String>> {
+        let mut pairs =
+            LedgerParser::parse(Rule::account, accstr).unwrap_or_else(|e| panic!("{}", e));
+        let mut segments = pairs.next().unwrap().into_inner();
+        let account_prefix = segments.next().unwrap().as_str();
+        let account_name = segments.next().unwrap().as_str();
+        let idx = self
+            .labels
+            .iter()
+            .position(|elt| elt == account_name)
+            .ok_or(LedgerError::new("account not exist").with_context(accstr.to_string()))?;
+
+        let account = match account_prefix {
+            "Assets" => AccountType::Assets(idx),
+            "Expenses" => AccountType::Expenses(idx),
+            "Liabilities" => AccountType::Liabilities(idx),
+            "Income" => AccountType::Income(idx),
+            "Equity" => AccountType::Equity(idx),
+            _ => panic!("Unknown account type: {}", account_prefix),
+        };
+
+        let account_idx = self
+            .accounts
+            .iter()
+            .position(|elt| elt == &account)
+            .ok_or(LedgerError::new("account not exist").with_context(accstr.to_string()))?;
+
+        // insert entry for closed_at_index
+        let entry_candidate = self.closed_at_index.get_mut(&date);
+        match entry_candidate {
+            None => {
+                self.closed_at_index.insert(date.clone(), vec![account_idx]);
+            }
+            Some(entry) => {
+                if entry.contains(&account_idx) {
+                    return Err(
+                        LedgerError::new("duplicate account").with_context(accstr.to_string())
+                    );
+                }
+                entry.push(account_idx);
+            }
+        }
+
+        // insert empty entry for opened_upto_index
+        // so we can have correct index calculation later
+        if None == self.opened_upto_index.get_mut(&date) {
+            self.opened_upto_index.insert(date, vec![]);
+        }
+
+        Ok(())
+    }
+
     pub fn build_index(&mut self) -> Result<(), LedgerError<AccountType>> {
         let indexes: Vec<NaiveDate> = self.opened_upto_index.keys().cloned().collect();
         let mut account_buffer: Vec<usize> = Vec::new();
@@ -202,9 +254,8 @@ impl AccountStore {
                 if account_buffer.contains(&idx) {
                     return Err(LedgerError::new("duplicated account")
                         .with_context(self.accounts[idx].clone()));
-                } else {
-                    account_buffer.push(idx);
                 }
+                account_buffer.push(idx);
             }
             if let Some(closed_entry) = self.closed_at_index.get(date) {
                 account_buffer = account_buffer
@@ -263,6 +314,7 @@ impl Ledger {
         match statement {
             Statement::Custom(date, args) => self.process_custom_statement(date, args),
             Statement::OpenAccount(date, account) => self.process_open_account(date, account),
+            Statement::CloseAccount(date, account) => self.process_close_account(date, account),
             _ => unreachable!(),
         }
     }
@@ -296,7 +348,13 @@ impl Ledger {
     }
 
     fn process_open_account(&mut self, date: NaiveDate, accstr: &str) {
-        self.accounts.put(date, accstr);
+        self.accounts.open(date, accstr);
+    }
+
+    fn process_close_account(&mut self, date: NaiveDate, accstr: &str) {
+        self.accounts
+            .close(date, accstr)
+            .unwrap_or_else(|err| panic!("{:?}", err));
     }
 }
 
@@ -343,6 +401,28 @@ mod tests {
                 .get_full_name(AccountType::Assets(0))
                 .unwrap(),
             "Assets:Bank:Jawir"
+        );
+    }
+
+    #[test]
+    fn test_close_account() {
+        let mut ledger = Ledger::new();
+        let date1 = NaiveDate::from_ymd(2020, 1, 25);
+        let date2 = NaiveDate::from_ymd(2021, 10, 28);
+        let date3 = NaiveDate::from_ymd(2021, 10, 30);
+        let date_query1 = NaiveDate::from_ymd(2021, 10, 29);
+        let date_query2 = NaiveDate::from_ymd(2021, 11, 1);
+        ledger.process_statement(Statement::OpenAccount(date1, "Assets:Bank:Jawir"));
+        ledger.process_statement(Statement::OpenAccount(date2, "Expenses:Dining"));
+        ledger.process_statement(Statement::CloseAccount(date3, "Assets:Bank:Jawir"));
+        ledger.build_index();
+        assert_eq!(
+            ledger.accounts.get_upto(&date_query1).unwrap(),
+            vec![AccountType::Assets(0), AccountType::Expenses(1)]
+        );
+        assert_eq!(
+            ledger.accounts.get_upto(&date_query2).unwrap(),
+            vec![AccountType::Expenses(1)]
         );
     }
 }
