@@ -38,6 +38,21 @@ impl AccountLabels {
             AccountType::Equity(idx) => self.0.get(idx).map(|label| format!("Equity{}", label)),
         }
     }
+
+    pub fn pos(&self, account_name: &str) -> Option<usize> {
+        self.0.iter().position(|elt| elt == account_name)
+    }
+
+    pub fn pos_with_insert(&mut self, account_name: &str) -> usize {
+        let idx_candidate = self.0.iter().position(|elt| elt == account_name);
+        match idx_candidate {
+            Some(idx) => idx,
+            None => {
+                self.0.push(account_name.to_string());
+                self.0.len() - 1
+            }
+        }
+    }
 }
 
 #[derive(Default)]
@@ -95,15 +110,7 @@ impl AccountStore {
         let mut segments = pairs.next().unwrap().into_inner();
         let account_prefix = segments.next().unwrap().as_str();
         let account_name = segments.next().unwrap().as_str();
-        let idx_candidate = self.labels.0.iter().position(|elt| elt == account_name);
-
-        let idx = match idx_candidate {
-            Some(idx) => idx,
-            None => {
-                self.labels.0.push(account_name.to_string());
-                self.labels.0.len() - 1
-            }
-        };
+        let idx = self.labels.pos_with_insert(account_name);
 
         let account = match account_prefix {
             "Assets" => AccountType::Assets(idx),
@@ -147,14 +154,9 @@ impl AccountStore {
         let mut segments = pairs.next().unwrap().into_inner();
         let account_prefix = segments.next().unwrap().as_str();
         let account_name = segments.next().unwrap().as_str();
-        let idx = self
-            .labels
-            .0
-            .iter()
-            .position(|elt| elt == account_name)
-            .ok_or_else(|| {
-                LedgerError::new("account not exist").with_context(accstr.to_string())
-            })?;
+        let idx = self.labels.pos(account_name).ok_or_else(|| {
+            LedgerError::new("account not exist").with_context(accstr.to_string())
+        })?;
 
         let account = match account_prefix {
             "Assets" => AccountType::Assets(idx),
