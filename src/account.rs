@@ -243,7 +243,9 @@ mod tests {
         let date_query = NaiveDate::from_ymd(2021, 11, 1);
         store.open(date1, "Assets:Bank:Jawir");
         store.open(date2, "Expenses:Dining");
-        store.build_index();
+        store
+            .build_index()
+            .unwrap_or_else(|err| panic!("{:?}", err));
         assert_eq!(
             store.get_upto(&date_query).unwrap(),
             vec![AccountType::Assets(0), AccountType::Expenses(1)]
@@ -264,7 +266,9 @@ mod tests {
         let date_query2 = NaiveDate::from_ymd(2021, 11, 1);
         store.open(date1, "Assets:Bank:Jawir");
         store.open(date2, "Expenses:Dining");
-        store.close(date3, "Assets:Bank:Jawir");
+        store
+            .close(date3, "Assets:Bank:Jawir")
+            .unwrap_or_else(|err| panic!("{:?}", err));
         store
             .build_index()
             .unwrap_or_else(|err| panic!("{:?}", err));
@@ -290,9 +294,13 @@ mod tests {
         let date_query3 = NaiveDate::from_ymd(2021, 11, 15);
         store.open(date1, "Assets:Bank:Jawir");
         store.open(date2, "Expenses:Dining");
-        store.close(date3, "Assets:Bank:Jawir");
+        store
+            .close(date3, "Assets:Bank:Jawir")
+            .unwrap_or_else(|err| panic!("{:?}", err));
         store.open(date4, "Assets:Bank:Jawir");
-        store.build_index();
+        store
+            .build_index()
+            .unwrap_or_else(|err| panic!("{:?}", err));
         assert_eq!(
             store.get_upto(&date_query1).unwrap(),
             vec![AccountType::Assets(0), AccountType::Expenses(1)]

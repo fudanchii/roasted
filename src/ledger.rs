@@ -128,7 +128,7 @@ impl Ledger {
 
 #[cfg(test)]
 mod tests {
-    use crate::ledger::{AccountType, Ledger};
+    use crate::ledger::Ledger;
     use crate::statement::Statement;
     use chrono::NaiveDate;
 
