@@ -8,5 +8,7 @@ edition = "2018"
 
 [dependencies]
 chrono = "0.4"
-pest = "2.0"
-pest_derive = "2.0"
+pest = { git = "https://github.com/pest-parser/pest" }
+pest_meta = { git = "https://github.com/pest-parser/pest" }
+pest_derive = { git = "https://github.com/pest-parser/pest" }
+pest_bootstrap = { git = "https://github.com/pest-parser/pest" }

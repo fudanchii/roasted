@@ -40,6 +40,7 @@ pub struct PadTransaction {
     position: Option<f64>,
 }
 
+#[derive(Default)]
 pub struct DayBook {
     custom: Vec<Vec<String>>,
     pads: Vec<PadTransaction>,
@@ -68,6 +69,7 @@ pub struct AccountActivities {
     closed_at: Option<NaiveDate>,
 }
 
+#[derive(Default)]
 pub struct AccountStore {
     labels: Vec<String>,
     accounts: Vec<AccountType>,
@@ -92,7 +94,7 @@ impl AccountStore {
     pub fn mapped_key(&self, date: &NaiveDate) -> Option<NaiveDate> {
         self.opened_upto_index
             .get(date)
-            .map(|_| date.clone())
+            .map(|_| *date)
             .or_else(|| {
                 self.opened_upto_index
                     .keys()
@@ -109,7 +111,7 @@ impl AccountStore {
 
         let date_idx = self
             .mapped_key(date)
-            .ok_or(LedgerError::new("given date is out of range"))?;
+            .ok_or_else(|| LedgerError::new("given date is out of range"))?;
         Ok(self
             .opened_upto_index
             .get(&date_idx)
@@ -203,7 +205,7 @@ impl AccountStore {
             .labels
             .iter()
             .position(|elt| elt == account_name)
-            .ok_or(LedgerError::new("account not exist").with_context(accstr.to_string()))?;
+            .ok_or_else(|| LedgerError::new("account not exist").with_context(accstr.to_string()))?;
 
         let account = match account_prefix {
             "Assets" => AccountType::Assets(idx),
@@ -218,13 +220,13 @@ impl AccountStore {
             .accounts
             .iter()
             .position(|elt| elt == &account)
-            .ok_or(LedgerError::new("account not exist").with_context(accstr.to_string()))?;
+            .ok_or_else(|| LedgerError::new("account not exist").with_context(accstr.to_string()))?;
 
         // insert entry for closed_at_index
         let entry_candidate = self.closed_at_index.get_mut(&date);
         match entry_candidate {
             None => {
-                self.closed_at_index.insert(date.clone(), vec![account_idx]);
+                self.closed_at_index.insert(date, vec![account_idx]);
             }
             Some(entry) => {
                 if entry.contains(&account_idx) {
@@ -285,6 +287,7 @@ impl LedgerError<()> {
     }
 }
 
+#[derive(Default)]
 pub struct Ledger {
     accounts: AccountStore,
     currencies: Vec<String>,

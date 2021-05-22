@@ -1,13 +1,13 @@
-ledger = _{ SOI ~ ((option | statement | comment) ~ NL*)+ ~ EOI }
+ledger = _{ SOI ~ ((option | statement | comment) ~ newline*)+ ~ EOI }
 
 option = {
-	"option" ~ SPC* ~ string ~ SPC* ~ string
+    "option" ~ whitespace* ~ string ~ whitespace* ~ string
 }
 
-comment = _{ SPC* ~ ";" ~ (!"\n" ~ ANY)* }
+comment = _{ whitespace* ~ ";" ~ (!"\n" ~ ANY)* }
 
 statement = {
-	custom_statement
+    custom_statement
     | open_statement
     | close_statement
     | commodity_statement
@@ -16,53 +16,53 @@ statement = {
     | balance_statement
     | transaction
 }
-	custom_statement = { date ~ SPC* ~ "custom" ~ (SPC* ~ string)+ }
-	open_statement = { date ~ SPC* ~ "open" ~ SPC* ~ account }
-	close_statement = { date ~ SPC* ~ "close" ~ SPC* ~ account }
-    commodity_statement = { date ~ SPC* ~ "commodity" ~ SPC* ~ currency }
+    custom_statement = { date ~ whitespace* ~ "custom" ~ (whitespace* ~ string)+ }
+    open_statement = { date ~ whitespace* ~ "open" ~ whitespace* ~ account }
+    close_statement = { date ~ whitespace* ~ "close" ~ whitespace* ~ account }
+    commodity_statement = { date ~ whitespace* ~ "commodity" ~ whitespace* ~ currency }
     price_statement = {
-    	date ~ SPC* ~ "price" ~ SPC* ~ currency ~ SPC* ~ amount
+        date ~ whitespace* ~ "price" ~ whitespace* ~ currency ~ whitespace* ~ amount
     }
-    pad_statement = { date ~ SPC* ~ "pad" ~ SPC* ~ account ~ SPC* ~ account }
+    pad_statement = { date ~ whitespace* ~ "pad" ~ whitespace* ~ account ~ whitespace* ~ account }
     balance_statement = {
-    	date ~ SPC* ~ "balance" ~ SPC* ~ account ~ SPC* ~ amount
+        date ~ whitespace* ~ "balance" ~ whitespace* ~ account ~ whitespace* ~ amount
     }
 
-transaction = { date ~ SPC* ~ trx_header ~ trx_list }
-	trx_header = { trx_state ~ SPC* ~ string ~ (SPC* ~ string)? }
-	trx_list = { (NL ~ comment* ~ account_statement){2,} }
-	trx_state = { ("*" | "!") }
-	account_statement = {
-    	SPC* ~ account ~ (SPC+ ~ amount_with_price?)? ~ comment*
+transaction = { date ~ whitespace* ~ trx_header ~ trx_list }
+    trx_header = { trx_state ~ whitespace* ~ string ~ (whitespace* ~ string)? }
+    trx_list = { (newline ~ comment* ~ account_statement){2,} }
+    trx_state = { ("*" | "!") }
+    account_statement = {
+        whitespace* ~ account ~ (whitespace+ ~ amount_with_price?)? ~ comment*
     }
-    amount_with_price = { amount ~ (SPC* ~ "@" ~ SPC* ~ price)? }
+    amount_with_price = { amount ~ (whitespace* ~ "@" ~ whitespace* ~ price)? }
     price = { amount }
 
 date = @{ year ~ "-" ~ month ~ "-" ~ day_of_month }
-	year = { ASCII_NONZERO_DIGIT ~ ASCII_DIGIT{,3} }
-	month = { ASCII_DIGIT{2} }
-	day_of_month = { ASCII_DIGIT{2} }
+    year = { ASCII_NONZERO_DIGIT ~ ASCII_DIGIT{,3} }
+    month = { ASCII_DIGIT{2} }
+    day_of_month = { ASCII_DIGIT{2} }
 
 
 account = { account_segment ~ account_suffix }
-	account_segment = { UPPERCASE_LETTER ~ (ASCII_ALPHANUMERIC | "-")* }
-	account_suffix = @{ (":" ~ account_segment)+ }
+    account_segment = { UPPERCASE_LETTER ~ (ASCII_ALPHANUMERIC | "-")* }
+    account_suffix = @{ (":" ~ account_segment)+ }
 
-amount = { amount_value ~ SPC* ~ currency }
-	amount_value = @{ "-"? ~ number }
+amount = { amount_value ~ whitespace* ~ currency }
+    amount_value = @{ "-"? ~ number }
     number = @{ integral ~ fraction? }
     integral = { "0" | (ASCII_NONZERO_DIGIT ~ ASCII_DIGIT*) }
     fraction = { "." ~ ASCII_DIGIT+  }
-	currency = { UPPERCASE_LETTER+ }
+    currency = { UPPERCASE_LETTER+ }
 
 
 string = ${ "\"" ~ string_content ~ "\"" }
-	string_content = @{ char* }
-	char = {
-    	!("\"" | "\\") ~ ANY
-    	| "\\" ~ ("\"" | "\\" | "/" | "b" | "f" | "n" | "r" | "t")
-    	| "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})
-	}
+    string_content = @{ char* }
+    char = {
+        !("\"" | "\\") ~ ANY
+        | "\\" ~ ("\"" | "\\" | "/" | "b" | "f" | "n" | "r" | "t")
+        | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})
+    }
 
-SPC = _{ (" " | "\t") }
-NL = _{ ("\r\n" | "\r" | "\n") }
+whitespace = _{ (" " | "\t") }
+newline = _{ ("\r\n" | "\r" | "\n") }
