@@ -425,4 +425,33 @@ mod tests {
             vec![AccountType::Expenses(1)]
         );
     }
+
+    #[test]
+    fn test_reopen_account() {
+        let mut ledger = Ledger::new();
+        let date1 = NaiveDate::from_ymd(2020, 1, 25);
+        let date2 = NaiveDate::from_ymd(2021, 10, 28);
+        let date3 = NaiveDate::from_ymd(2021, 10, 30);
+        let date4 = NaiveDate::from_ymd(2021, 11, 15);
+        let date_query1 = NaiveDate::from_ymd(2021, 10, 29);
+        let date_query2 = NaiveDate::from_ymd(2021, 11, 1);
+        let date_query3 = NaiveDate::from_ymd(2021, 11, 15);
+        ledger.process_statement(Statement::OpenAccount(date1, "Assets:Bank:Jawir"));
+        ledger.process_statement(Statement::OpenAccount(date2, "Expenses:Dining"));
+        ledger.process_statement(Statement::CloseAccount(date3, "Assets:Bank:Jawir"));
+        ledger.process_statement(Statement::OpenAccount(date4, "Assets:Bank:Jawir"));
+        ledger.build_index();
+        assert_eq!(
+            ledger.accounts.get_upto(&date_query1).unwrap(),
+            vec![AccountType::Assets(0), AccountType::Expenses(1)]
+        );
+        assert_eq!(
+            ledger.accounts.get_upto(&date_query2).unwrap(),
+            vec![AccountType::Expenses(1)]
+        );
+        assert_eq!(
+            ledger.accounts.get_upto(&date_query3).unwrap(),
+            vec![AccountType::Expenses(1), AccountType::Assets(0)]
+        );
+    }
 }
