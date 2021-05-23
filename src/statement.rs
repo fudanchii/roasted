@@ -1,9 +1,6 @@
+use crate::parser::{inner_str, Rule};
 use chrono::NaiveDate;
 use pest::iterators::Pair;
-
-use crate::inner_str;
-use crate::parser::Rule;
-
 use std::cmp::PartialEq;
 
 #[derive(Debug, PartialEq)]
@@ -38,7 +35,7 @@ impl<'a> Statement<'a> {
         let date = NaiveDate::parse_from_str(datestr, "%Y-%m-%d").unwrap();
 
         match tag {
-            "custom" => Self::Custom(date, pairs.map(|p| inner_str!(p)).collect()),
+            "custom" => Self::Custom(date, pairs.map(|p| inner_str(p)).collect()),
             "open" => Self::OpenAccount(date, pairs.next().unwrap().as_str()),
             "close" => Self::CloseAccount(date, pairs.next().unwrap().as_str()),
             "pad" => Self::Pad(
