@@ -7,7 +7,9 @@ This is a clean room implementation of interpreter for Beancount ledger file, fr
 
 Roasted has several different behavior compared to Beancount and **not** aimed to be always 100% compatible with Beancount.
 
-== Architecture
+Architecture
+---
+
 Roasted consisted of 3 components:
 
 - libroasted
@@ -17,7 +19,8 @@ Roasted consisted of 3 components:
 - roasted-cli
   command line interface for your double book accounting.
 
-== License
+License
+---
 
 Licensed under either of these:
 
