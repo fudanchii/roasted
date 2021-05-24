@@ -7,6 +7,8 @@ use pest::Parser;
 #[grammar = "ledger.pest"]
 pub struct LedgerParser;
 
+/// Parses ledger input as string slice, we are not concerning ourselves
+/// with file input, so reading from files will need to be handled by the client code.
 pub fn parse(input: &str) -> Result<Ledger, Error<Rule>> {
     let statements = LedgerParser::parse(Rule::ledger, input)?;
 
