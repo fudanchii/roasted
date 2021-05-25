@@ -1,17 +1,26 @@
 //! Roasted - A text based double-book accounting ledger file parser
 //! ---
 //!
-//! Inspired by [beancount](https://beancount.github.io), roasted is more opinionated and
-//! focused on daily cash / liabilities tracking, and less about assets such as stock or its
+//! Inspired by [Beancount](https://beancount.github.io), roasted is more opinionated and
+//! focused on more day to day stuff like cash, bank accounts, liabilities tracking, and less about assets such as stock or its
 //! derivatives.
+//!
 
 extern crate pest;
 #[macro_use]
 extern crate pest_derive;
 
-mod account;
+/// Parse and manage accounts syntaxes, e.g. `Assets:Bank:Jawir`.
+///
+/// The main structure is [`AccountStore`][account::AccountStore], which handle the parsing
+/// and indexing accounts by its `open` and `close` date.
+///
+/// Unlike [Beancount](https://beancount.github.io), roasted acknowledged that accounts may be closed
+/// temporarily and reopened at certain future date. In this case, roasted prohibit any
+/// transactions using the closed account, and will allow it again when its reopened.
+pub mod account;
 
-/// Our ledger representation.
+/// Ledger representation.
 pub mod ledger;
 mod parser;
 mod statement;
@@ -19,6 +28,9 @@ mod statement;
 pub use parser::parse;
 
 /// Contextual error for ledger parser.
+/// LedgerError allows simple message to annotate error,
+/// and an additional context data with any type complying
+/// [std::fmt::Debug] constraint.
 #[derive(Debug)]
 pub struct LedgerError<T: std::fmt::Debug>(&'static str, T);
 
