@@ -1,4 +1,4 @@
-use crate::account::{AccountStore, AccountType};
+use crate::account::{AccountStore, Account};
 use crate::statement::Statement;
 use chrono::naive::NaiveDate;
 use std::collections::{BTreeMap, HashMap};
@@ -6,26 +6,28 @@ use std::collections::{BTreeMap, HashMap};
 pub enum TransactionState {
     Settled,
     Unsettled,
+    Recurring,
+    Virtual,
 }
 
 pub struct Transaction {
     state: TransactionState,
     payee: Option<String>,
     header: String,
-    accounts: Vec<AccountType>,
+    accounts: Vec<Account>,
     exchanges: Vec<f64>,
     currency: usize,
 }
 
 pub struct BalanceAssertion {
-    account: AccountType,
+    account: Account,
     position: f64,
     currency: usize,
 }
 
 pub struct PadTransaction {
-    left_account: AccountType,
-    right_account: AccountType,
+    left_account: Account,
+    right_account: Account,
     position: Option<f64>,
 }
 
@@ -95,8 +97,8 @@ impl Ledger {
         self.transactions.get(date)
     }
 
-    pub fn build_index(&mut self) {
-        self.accounts.build_index().unwrap();
+    pub fn reindex(&mut self) {
+        self.accounts.reindex().unwrap();
     }
 
     fn process_custom_statement(&mut self, date: NaiveDate, args: Vec<&str>) {

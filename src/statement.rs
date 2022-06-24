@@ -15,70 +15,39 @@ pub enum Statement<'a> {
 
 impl<'a> From<Pair<'a, Rule>> for Statement<'a> {
     fn from(pair: Pair<'a, Rule>) -> Self {
-        let statement = pair.into_inner().next().unwrap();
-        match statement.as_rule() {
-            Rule::custom_statement => Self::custom_statement(statement),
-            Rule::open_statement => Self::open_statement(statement),
-            Rule::close_statement => Self::close_statement(statement),
-            Rule::pad_statement => Self::pad_statement(statement),
-            Rule::balance_statement => Self::balance_statement(statement),
-            Rule::transaction => Self::transaction(statement),
-            _ => unreachable!(),
-        }
+        let inner = pair.into_inner().next().unwrap();
+        Self::into_statement(inner)
     }
 }
 
 impl<'a> Statement<'a> {
-    fn statement(tag: &str, statement: Pair<'a, Rule>) -> Self {
+    fn into_statement(statement: Pair<'a, Rule>) -> Self {
+        let tag = statement.as_rule();
         let mut pairs = statement.into_inner();
         let datestr = pairs.next().unwrap().as_str();
         let date = NaiveDate::parse_from_str(datestr, "%Y-%m-%d").unwrap();
 
         match tag {
-            "custom" => Self::Custom(date, pairs.map(|p| inner_str(p)).collect()),
-            "open" => Self::OpenAccount(date, pairs.next().unwrap().as_str()),
-            "close" => Self::CloseAccount(date, pairs.next().unwrap().as_str()),
-            "pad" => Self::Pad(
+            Rule::custom_statement => Self::Custom(date, pairs.map(|p| inner_str(p)).collect()),
+            Rule::open_statement => Self::OpenAccount(date, pairs.next().unwrap().as_str()),
+            Rule::close_statement => Self::CloseAccount(date, pairs.next().unwrap().as_str()),
+            Rule::pad_statement => Self::Pad(
                 date,
                 pairs.next().unwrap().as_str(),
                 pairs.next().unwrap().as_str(),
             ),
-            "balance" => Self::Balance(
+            Rule::balance_statement => Self::Balance(
                 date,
                 pairs.next().unwrap().as_str(),
                 pairs.next().unwrap().as_str(),
             ),
-            "transaction" => Self::Transaction(
+            Rule::transaction => Self::Transaction(
                 date,
                 pairs.next().unwrap().as_str(),
                 pairs.next().unwrap().as_str(),
             ),
             _ => unreachable!(),
         }
-    }
-
-    pub fn custom_statement(statement: Pair<'a, Rule>) -> Self {
-        Self::statement("custom", statement)
-    }
-
-    pub fn open_statement(statement: Pair<'a, Rule>) -> Self {
-        Self::statement("open", statement)
-    }
-
-    pub fn close_statement(statement: Pair<'a, Rule>) -> Self {
-        Self::statement("close", statement)
-    }
-
-    pub fn pad_statement(statement: Pair<'a, Rule>) -> Self {
-        Self::statement("pad", statement)
-    }
-
-    pub fn balance_statement(statement: Pair<'a, Rule>) -> Self {
-        Self::statement("balance", statement)
-    }
-
-    pub fn transaction(statement: Pair<'a, Rule>) -> Self {
-        Self::statement("transaction", statement)
     }
 }
 

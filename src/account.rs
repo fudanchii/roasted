@@ -6,7 +6,7 @@ use std::cmp::PartialEq;
 use std::collections::BTreeMap;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum AccountType {
+pub enum Account {
     Assets(usize),
     Expenses(usize),
     Liabilities(usize),
@@ -27,15 +27,16 @@ impl AccountLabels {
     pub fn new() -> Self {
         Self(Vec::new())
     }
-    pub fn account_name(&self, account: AccountType) -> Option<String> {
+
+    pub fn account_name(&self, account: Account) -> Option<String> {
         match account {
-            AccountType::Assets(idx) => self.0.get(idx).map(|label| format!("Assets{}", label)),
-            AccountType::Expenses(idx) => self.0.get(idx).map(|label| format!("Expenses{}", label)),
-            AccountType::Liabilities(idx) => {
+            Account::Assets(idx) => self.0.get(idx).map(|label| format!("Assets{}", label)),
+            Account::Expenses(idx) => self.0.get(idx).map(|label| format!("Expenses{}", label)),
+            Account::Liabilities(idx) => {
                 self.0.get(idx).map(|label| format!("Liabilities{}", label))
             }
-            AccountType::Income(idx) => self.0.get(idx).map(|label| format!("Income{}", label)),
-            AccountType::Equity(idx) => self.0.get(idx).map(|label| format!("Equity{}", label)),
+            Account::Income(idx) => self.0.get(idx).map(|label| format!("Income{}", label)),
+            Account::Equity(idx) => self.0.get(idx).map(|label| format!("Equity{}", label)),
         }
     }
 
@@ -58,7 +59,7 @@ impl AccountLabels {
 #[derive(Default)]
 pub struct AccountStore {
     labels: AccountLabels,
-    accounts: Vec<AccountType>,
+    accounts: Vec<Account>,
     account_activities: Vec<AccountActivities>,
     opened_upto_index: BTreeMap<NaiveDate, Vec<usize>>,
     closed_at_index: BTreeMap<NaiveDate, Vec<usize>>,
@@ -87,9 +88,9 @@ impl AccountStore {
         })
     }
 
-    pub fn get_upto(&self, date: &NaiveDate) -> Result<Vec<AccountType>, LedgerError<()>> {
+    pub fn get_upto(&self, date: &NaiveDate) -> Result<Vec<Account>, LedgerError<()>> {
         if self.need_indexing {
-            return Err(LedgerError::new("need to call build_index before querying"));
+            return Err(LedgerError::new("need to reindex before querying"));
         }
 
         let date_idx = self
@@ -113,11 +114,11 @@ impl AccountStore {
         let idx = self.labels.pos_with_insert(account_name);
 
         let account = match account_prefix {
-            "Assets" => AccountType::Assets(idx),
-            "Expenses" => AccountType::Expenses(idx),
-            "Liabilities" => AccountType::Liabilities(idx),
-            "Income" => AccountType::Income(idx),
-            "Equity" => AccountType::Equity(idx),
+            "Assets" => Account::Assets(idx),
+            "Expenses" => Account::Expenses(idx),
+            "Liabilities" => Account::Liabilities(idx),
+            "Income" => Account::Income(idx),
+            "Equity" => Account::Equity(idx),
             _ => panic!("Unknown account type: {}", account_prefix),
         };
 
@@ -159,11 +160,11 @@ impl AccountStore {
         })?;
 
         let account = match account_prefix {
-            "Assets" => AccountType::Assets(idx),
-            "Expenses" => AccountType::Expenses(idx),
-            "Liabilities" => AccountType::Liabilities(idx),
-            "Income" => AccountType::Income(idx),
-            "Equity" => AccountType::Equity(idx),
+            "Assets" => Account::Assets(idx),
+            "Expenses" => Account::Expenses(idx),
+            "Liabilities" => Account::Liabilities(idx),
+            "Income" => Account::Income(idx),
+            "Equity" => Account::Equity(idx),
             _ => panic!("Unknown account type: {}", account_prefix),
         };
 
@@ -200,7 +201,7 @@ impl AccountStore {
         Ok(())
     }
 
-    pub fn build_index(&mut self) -> Result<(), LedgerError<String>> {
+    pub fn reindex(&mut self) -> Result<(), LedgerError<String>> {
         let indexes: Vec<NaiveDate> = self.opened_upto_index.keys().cloned().collect();
         let mut account_buffer: Vec<usize> = Vec::new();
         for date in indexes.iter() {
@@ -232,7 +233,7 @@ impl AccountStore {
 
 #[cfg(test)]
 mod tests {
-    use crate::account::{AccountStore, AccountType};
+    use crate::account::{Account, AccountStore};
     use chrono::NaiveDate;
 
     #[test]
@@ -244,14 +245,14 @@ mod tests {
         store.open(date1, "Assets:Bank:Jawir");
         store.open(date2, "Expenses:Dining");
         store
-            .build_index()
+            .reindex()
             .unwrap_or_else(|err| panic!("{:?}", err));
         assert_eq!(
             store.get_upto(&date_query).unwrap(),
-            vec![AccountType::Assets(0), AccountType::Expenses(1)]
+            vec![Account::Assets(0), Account::Expenses(1)]
         );
         assert_eq!(
-            store.labels.account_name(AccountType::Assets(0)).unwrap(),
+            store.labels.account_name(Account::Assets(0)).unwrap(),
             "Assets:Bank:Jawir"
         );
     }
@@ -270,15 +271,15 @@ mod tests {
             .close(date3, "Assets:Bank:Jawir")
             .unwrap_or_else(|err| panic!("{:?}", err));
         store
-            .build_index()
+            .reindex()
             .unwrap_or_else(|err| panic!("{:?}", err));
         assert_eq!(
             store.get_upto(&date_query1).unwrap(),
-            vec![AccountType::Assets(0), AccountType::Expenses(1)]
+            vec![Account::Assets(0), Account::Expenses(1)]
         );
         assert_eq!(
             store.get_upto(&date_query2).unwrap(),
-            vec![AccountType::Expenses(1)]
+            vec![Account::Expenses(1)]
         );
     }
 
@@ -299,19 +300,19 @@ mod tests {
             .unwrap_or_else(|err| panic!("{:?}", err));
         store.open(date4, "Assets:Bank:Jawir");
         store
-            .build_index()
+            .reindex()
             .unwrap_or_else(|err| panic!("{:?}", err));
         assert_eq!(
             store.get_upto(&date_query1).unwrap(),
-            vec![AccountType::Assets(0), AccountType::Expenses(1)]
+            vec![Account::Assets(0), Account::Expenses(1)]
         );
         assert_eq!(
             store.get_upto(&date_query2).unwrap(),
-            vec![AccountType::Expenses(1)]
+            vec![Account::Expenses(1)]
         );
         assert_eq!(
             store.get_upto(&date_query3).unwrap(),
-            vec![AccountType::Expenses(1), AccountType::Assets(0)]
+            vec![Account::Expenses(1), Account::Assets(0)]
         );
     }
 }
