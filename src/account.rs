@@ -9,25 +9,25 @@ use pest::iterators::Pair;
 pub mod error {}
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Account {
-    Assets(Vec<String>),
-    Expenses(Vec<String>),
-    Liabilities(Vec<String>),
-    Income(Vec<String>),
-    Equity(Vec<String>),
+pub enum Account<'a> {
+    Assets(Vec<&'a str>),
+    Expenses(Vec<&'a str>),
+    Liabilities(Vec<&'a str>),
+    Income(Vec<&'a str>),
+    Equity(Vec<&'a str>),
 }
 
-impl Account {
-    pub fn base_name(s: &str) -> Vec<String> {
-        s.split(':').skip(1).map(|s| s.to_string()).collect()
+impl<'a> Account<'a> {
+    pub fn base_name(s: &'a str) -> Vec<&'a str> {
+        s.split(':').skip(1).collect()
     }
 
-    pub fn parse(token: Pair<'_, Rule>) -> Result<Self, &'static str> {
+    pub fn parse(token: Pair<'a, Rule>) -> Result<Account<'a>, &'static str> {
         token.as_str().try_into()
     }
 }
 
-impl fmt::Display for Account {
+impl<'a> fmt::Display for Account<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Account::Assets(v) => write!(f, "Assets:{}", v.join(":")),
@@ -39,10 +39,10 @@ impl fmt::Display for Account {
     }
 }
 
-impl TryFrom<&str> for Account {
+impl<'a> TryFrom<&'a str> for Account<'a> {
     type Error = &'static str;
 
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
+    fn try_from(s: &'a str) -> Result<Self, Self::Error> {
         if s.starts_with("Assets:") {
             return Ok(Account::Assets(Account::base_name(s)));
         }
@@ -97,13 +97,13 @@ impl AccountStore {
         Default::default()
     }
 
-    fn index_segments(&mut self, v: &Vec<String>) -> Vec<usize> {
+    fn index_segments(&mut self, v: &Vec<&str>) -> Vec<usize> {
         let mut idxs: Vec<usize> = Vec::new();
         for segment in v {
             if let Some(ppos) = self.segments.iter().position(|s| s == segment) {
                 idxs.push(ppos);
             } else {
-                self.segments.push(segment.clone());
+                self.segments.push(segment.to_string());
                 idxs.push(self.segments.len() - 1);
             }
         }
@@ -111,7 +111,7 @@ impl AccountStore {
         idxs
     }
 
-    fn lookup_index(&self, v: &Vec<String>) -> Option<Vec<usize>> {
+    fn lookup_index(&self, v: &Vec<&str>) -> Option<Vec<usize>> {
         let mut idxs: Vec<usize> = Vec::new();
         for segment in v {
             let pos = self.segments.iter().position(|s| s == segment)?;
@@ -121,7 +121,7 @@ impl AccountStore {
         Some(idxs)
     }
 
-    pub fn open(&mut self, acc: &Account, at: NaiveDate) -> Result<(), &'static str> {
+    pub fn open<'a>(&mut self, acc: &Account<'a>, at: NaiveDate) -> Result<(), &'static str> {
         match acc {
             Account::Assets(val) => {
                 let idxs = self.index_segments(val);
@@ -189,7 +189,7 @@ impl AccountStore {
             .ok_or("valid account with no activities")
     }
 
-    pub fn close(&mut self, acc: &Account, at: NaiveDate) -> Result<(), &'static str> {
+    pub fn close<'a>(&mut self, acc: &Account<'a>, at: NaiveDate) -> Result<(), &'static str> {
         let txn_acc = self.txnify(acc, at)?;
         match txn_acc {
             TxnAccount::Assets(idxs) => Self::close_account(&mut self.assets, &idxs, at)?,
@@ -227,7 +227,7 @@ impl AccountStore {
         None
     }
 
-    pub fn txnify(&self, acc: &Account, date: NaiveDate) -> Result<TxnAccount, &'static str> {
+    pub fn txnify<'a>(&self, acc: &Account<'a>, date: NaiveDate) -> Result<TxnAccount, &'static str> {
         let txn_account = match acc {
             Account::Assets(val) => self.lookup_index(val).map(|idxs| TxnAccount::Assets(idxs)),
             Account::Expenses(val) => self
@@ -245,11 +245,11 @@ impl AccountStore {
             .ok_or("unopened account")
     }
 
-    fn lookup_segments(&self, v: &Vec<usize>) -> Result<Vec<String>, &'static str> {
+    fn lookup_segments<'a>(&'a self, v: &Vec<usize>) -> Result<Vec<&'a str>, &'static str> {
         let mut segments = Vec::new();
         for &idx in v {
             let segment = self.segments.get(idx).ok_or("undefined account")?;
-            segments.push(segment.clone());
+            segments.push(segment.as_str());
         }
         Ok(segments)
     }

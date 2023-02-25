@@ -6,24 +6,24 @@ use pest::iterators::Pair;
 use std::cmp::PartialEq;
 
 #[derive(Debug, PartialEq)]
-pub enum Statement<'a> {
-    Custom(NaiveDate, Vec<&'a str>),
-    OpenAccount(NaiveDate, Account),
-    CloseAccount(NaiveDate, Account),
-    Pad(NaiveDate, Account, Account),
-    Balance(NaiveDate, Account, Amount),
-    Transaction(NaiveDate, Pair<'a, Rule>, Pair<'a, Rule>),
+pub enum Statement<'s> {
+    Custom(NaiveDate, Vec<&'s str>),
+    OpenAccount(NaiveDate, Account<'s>),
+    CloseAccount(NaiveDate, Account<'s>),
+    Pad(NaiveDate, Account<'s>, Account<'s>),
+    Balance(NaiveDate, Account<'s>, Amount<'s>),
+    Transaction(NaiveDate, Pair<'s, Rule>, Pair<'s, Rule>),
 }
 
-impl<'a> From<Pair<'a, Rule>> for Statement<'a> {
-    fn from(pair: Pair<'a, Rule>) -> Self {
+impl<'s> From<Pair<'s, Rule>> for Statement<'s> {
+    fn from(pair: Pair<'s, Rule>) -> Self {
         let inner = pair.into_inner().next().unwrap();
         Self::into_statement(inner)
     }
 }
 
-impl<'a> Statement<'a> {
-    fn into_statement(statement: Pair<'a, Rule>) -> Self {
+impl<'s> Statement<'s> {
+    fn into_statement(statement: Pair<'s, Rule>) -> Self {
         let tag = statement.as_rule();
         let mut pairs = statement.into_inner();
         let datestr = pairs.next().unwrap().as_str();
@@ -84,7 +84,7 @@ mod tests {
             statement,
             Statement::OpenAccount(
                 NaiveDate::from_ymd(2021, 2, 2),
-                Account::Assets(vec!["Bank".to_string(), "Jago".to_string()])
+                Account::Assets(vec!["Bank", "Jago"])
             )
         );
     }
@@ -101,7 +101,7 @@ mod tests {
             statement,
             Statement::CloseAccount(
                 NaiveDate::from_ymd(2021, 12, 31),
-                Account::Liabilities(vec!["CrediCard".to_string(), "VISA".to_string()]),
+                Account::Liabilities(vec!["CrediCard", "VISA"]),
             )
         );
     }
@@ -118,8 +118,8 @@ mod tests {
             statement,
             Statement::Pad(
                 NaiveDate::from_ymd(2021, 11, 10),
-                Account::Assets(vec!["Cash".to_string(), "OnHand".to_string()]),
-                Account::Expenses(vec!["Wasted".to_string()]),
+                Account::Assets(vec!["Cash", "OnHand"]),
+                Account::Expenses(vec!["Wasted"]),
             )
         );
     }
@@ -136,10 +136,10 @@ mod tests {
             statement,
             Statement::Balance(
                 NaiveDate::from_ymd(2021, 2, 28),
-                Account::Assets(vec!["Cash".to_string(), "OnHand".to_string()]),
+                Account::Assets(vec!["Cash", "OnHand"]),
                 Amount {
                     nominal: 65750.55f64,
-                    currency: "USD".to_string(),
+                    currency: "USD",
                     price: None,
                 }
             )

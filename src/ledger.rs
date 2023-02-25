@@ -1,6 +1,6 @@
 use crate::statement::Statement;
 use crate::{
-    account::{Account, AccountStore},
+    account::{TxnAccount, AccountStore},
     transaction::Transaction,
 };
 use chrono::naive::NaiveDate;
@@ -10,14 +10,14 @@ use crate::parser::Rule;
 use pest::iterators::Pair;
 
 pub struct BalanceAssertion {
-    account: Account,
+    account: TxnAccount,
     position: f64,
     currency: usize,
 }
 
 pub struct PadTransaction {
-    left_account: Account,
-    right_account: Account,
+    left_account: TxnAccount,
+    right_account: TxnAccount,
     position: Option<f64>,
 }
 
@@ -47,7 +47,6 @@ impl DayBook {
 #[derive(Default)]
 pub struct Ledger {
     accounts: AccountStore,
-    currencies: Vec<String>,
     bookings: BTreeMap<NaiveDate, DayBook>,
     options: HashMap<String, String>,
 }
@@ -56,7 +55,6 @@ impl Ledger {
     pub fn new() -> Ledger {
         Ledger {
             accounts: AccountStore::new(),
-            currencies: Vec::new(),
             bookings: BTreeMap::new(),
             options: HashMap::new(),
         }
@@ -89,19 +87,16 @@ impl Ledger {
     }
 
     fn process_custom_statement(&mut self, date: NaiveDate, args: Vec<&str>) {
-        let bookwrap = self.get_mut_at(&date);
-        match bookwrap {
-            Some(book) => {
-                book.custom
-                    .push(args.iter().map(|s| s.to_string()).collect());
-            }
-            None => {
-                let mut book = DayBook::new();
-                book.custom
-                    .push(args.iter().map(|s| s.to_string()).collect());
-                self.bookings.insert(date, book);
-            }
+        if let Some(book) = self.get_mut_at(&date) {
+            book.custom
+                .push(args.iter().map(|s| s.to_string()).collect());
+            return;
         }
+
+        let mut book = DayBook::new();
+        book.custom
+            .push(args.iter().map(|s| s.to_string()).collect());
+        self.bookings.insert(date, book);
     }
 
     fn process_transaction_statement(

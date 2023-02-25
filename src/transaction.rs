@@ -1,7 +1,7 @@
 use crate::parser::Rule;
 use crate::pest::Parser;
 use crate::{
-    account::{Account, AccountStore},
+    account::{TxnAccount, AccountStore},
     parser::LedgerParser,
 };
 use chrono::NaiveDate;
@@ -17,7 +17,7 @@ pub struct Transaction {
     state: TransactionState,
     payee: Option<String>,
     title: String,
-    accounts: Vec<Account>,
+    accounts: Vec<TxnAccount>,
     exchanges: Vec<f64>,
     currencies: Vec<String>,
 }

@@ -2,14 +2,14 @@ use crate::parser::Rule;
 use pest::iterators::Pair;
 
 #[derive(Debug, PartialEq)]
-pub struct Amount {
+pub struct Amount<'s> {
     pub(crate) nominal: f64,
-    pub(crate) currency: String,
-    pub(crate) price: Option<Box<Amount>>,
+    pub(crate) currency: &'s str,
+    pub(crate) price: Option<Box<Amount<'s>>>,
 }
 
-impl<'a> Amount {
-    pub fn parse(token: Pair<'a, Rule>) -> Result<Amount, &'static str> {
+impl<'a> Amount<'a> {
+    pub fn parse(token: Pair<'a, Rule>) -> Result<Amount<'a>, &'static str> {
         match token.as_rule() {
             Rule::amount_with_price => {
                 let mut pairs = token.into_inner();
@@ -22,7 +22,7 @@ impl<'a> Amount {
                 let mut amount = token.into_inner();
                 Ok(Amount {
                     nominal: amount.next().unwrap().as_str().parse::<f64>().unwrap(),
-                    currency: amount.next().unwrap().as_str().to_string(),
+                    currency: amount.next().unwrap().as_str(),
                     price: None,
                 })
             }
@@ -43,7 +43,6 @@ impl<'a> Amount {
 mod tests {
     use crate::amount::Amount;
     use crate::parser::{LedgerParser, Rule};
-    use pest::iterators::Pair;
     use pest::Parser;
 
     #[test]
@@ -56,10 +55,10 @@ mod tests {
             amount,
             Amount {
                 nominal: 1337f64,
-                currency: "USD".to_string(),
+                currency: "USD",
                 price: Some(Box::new(Amount {
                     nominal: 1000f64,
-                    currency: "IDR".to_string(),
+                    currency: "IDR",
                     price: None,
                 }))
             }
