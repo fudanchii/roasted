@@ -2,7 +2,7 @@
 //! ---
 //!
 //! Inspired by [Beancount](https://beancount.github.io), roasted is more opinionated and
-//! focused on more day to day stuff like cash, bank accounts, liabilities tracking, and less about assets such as stock or its
+//! focused more on day to day stuff like cash, bank accounts, liabilities tracking, and less about assets such as stock or its
 //! derivatives.
 //!
 
@@ -23,7 +23,9 @@ pub mod account;
 /// Ledger representation.
 pub mod ledger;
 mod parser;
+mod amount;
 mod statement;
+mod transaction;
 
 pub use parser::parse;
 

@@ -1,4 +1,6 @@
+use crate::account::Account;
 use crate::parser::{inner_str, Rule};
+use crate::amount::Amount;
 use chrono::NaiveDate;
 use pest::iterators::Pair;
 use std::cmp::PartialEq;
@@ -9,8 +11,8 @@ pub enum Statement<'a> {
     OpenAccount(NaiveDate, &'a str),
     CloseAccount(NaiveDate, &'a str),
     Pad(NaiveDate, &'a str, &'a str),
-    Balance(NaiveDate, &'a str, &'a str),
-    Transaction(NaiveDate, &'a str, &'a str),
+    Balance(NaiveDate, Account, Amount),
+    Transaction(NaiveDate, Pair<'a, Rule>, Pair<'a, Rule>),
 }
 
 impl<'a> From<Pair<'a, Rule>> for Statement<'a> {
@@ -38,13 +40,13 @@ impl<'a> Statement<'a> {
             ),
             Rule::balance_statement => Self::Balance(
                 date,
-                pairs.next().unwrap().as_str(),
-                pairs.next().unwrap().as_str(),
+                pairs.next().unwrap().as_str().try_into().unwrap(),
+                Amount::parse(pairs.next().unwrap()).unwrap(),
             ),
             Rule::transaction => Self::Transaction(
                 date,
-                pairs.next().unwrap().as_str(),
-                pairs.next().unwrap().as_str(),
+                pairs.next().unwrap(),
+                pairs.next().unwrap(),
             ),
             _ => unreachable!(),
         }
@@ -53,6 +55,8 @@ impl<'a> Statement<'a> {
 
 #[cfg(test)]
 mod tests {
+    use crate::account::Account;
+    use crate::amount::Amount;
     use crate::parser::{LedgerParser, Rule};
     use crate::statement::Statement;
     use chrono::NaiveDate;
@@ -72,12 +76,12 @@ mod tests {
 
     #[test]
     fn parse_open_statement() {
-        let mut ast = LedgerParser::parse(Rule::statement, "2021-02-02 open Asset:Bank:Jago")
+        let mut ast = LedgerParser::parse(Rule::statement, "2021-02-02 open Assets:Bank:Jago")
             .unwrap_or_else(|e| panic!("{}", e));
         let statement = Statement::from(ast.next().unwrap());
         assert_eq!(
             statement,
-            Statement::OpenAccount(NaiveDate::from_ymd(2021, 2, 2), "Asset:Bank:Jago")
+            Statement::OpenAccount(NaiveDate::from_ymd(2021, 2, 2), "Assets:Bank:Jago")
         );
     }
 
@@ -102,7 +106,7 @@ mod tests {
     fn parse_pad_statement() {
         let mut ast = LedgerParser::parse(
             Rule::statement,
-            "2021-11-10 pad Asset:Cash:OnHand Expense:Wasted",
+            "2021-11-10 pad Assets:Cash:OnHand Expenses:Wasted",
         )
         .unwrap_or_else(|e| panic!("{}", e));
         let statement = Statement::from(ast.next().unwrap());
@@ -110,8 +114,8 @@ mod tests {
             statement,
             Statement::Pad(
                 NaiveDate::from_ymd(2021, 11, 10),
-                "Asset:Cash:OnHand",
-                "Expense:Wasted"
+                "Assets:Cash:OnHand",
+                "Expenses:Wasted"
             )
         );
     }
@@ -120,16 +124,18 @@ mod tests {
     fn parse_balance_statement() {
         let mut ast = LedgerParser::parse(
             Rule::statement,
-            "2021-02-28 balance\tAsset:Cash:OnHand \t 65750.55\tUSD",
+            "2021-02-28 balance\tAssets:Cash:OnHand \t 65750.55\tUSD",
         )
         .unwrap_or_else(|e| panic!("{}", e));
         let statement = Statement::from(ast.next().unwrap());
+        let mut amount_ast = LedgerParser::parse(Rule::amount, "65750.55 USD").unwrap_or_else(|e| panic!("{}", e));
+        let amount = Amount::parse(amount_ast.next().unwrap()).unwrap();
         assert_eq!(
             statement,
             Statement::Balance(
                 NaiveDate::from_ymd(2021, 2, 28),
-                "Asset:Cash:OnHand",
-                "65750.55\tUSD"
+                Account::Assets(vec!["Cash".to_string(), "OnHand".to_string()]),
+                amount
             )
         );
     }
@@ -139,21 +145,15 @@ mod tests {
         let mut ast = LedgerParser::parse(
             Rule::statement,
             r#"2021-04-01 * "Gubuk mang Engking" "Splurge @ diner"
-                 Asset:Cash
-                 Expense:Dining              50 USD
+                 Assets:Cash
+                 Expenses:Dining              50 USD
             "#,
         )
         .unwrap_or_else(|e| panic!("{}", e));
         let statement = Statement::from(ast.next().unwrap());
         assert_eq!(
-            statement,
-            Statement::Transaction(
-                NaiveDate::from_ymd(2021, 4, 1),
-                r#"* "Gubuk mang Engking" "Splurge @ diner""#,
-                r#"
-                 Asset:Cash
-                 Expense:Dining              50 USD"#
-            )
+            if let Statement::Transaction(_, header, _) = statement { header.as_str() } else { "" },
+            r#"* "Gubuk mang Engking" "Splurge @ diner""#,
         );
     }
 }

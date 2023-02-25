@@ -1,4 +1,8 @@
-ledger = _{ SOI ~ ((option | statement | comment) ~ newline*)+ ~ EOI }
+ledger = _{ SOI ~ include? ~ ((option | statement | comment) ~ newline*)+ ~ EOI }
+
+include = {
+    "include" ~ whitespace* ~ string ~ newline+
+}
 
 option = {
     "option" ~ whitespace* ~ string ~ whitespace* ~ string
@@ -29,14 +33,15 @@ statement = {
     }
 
 transaction = { date ~ whitespace* ~ trx_header ~ trx_list }
-    trx_header = { trx_state ~ whitespace* ~ string ~ (whitespace* ~ string)? }
+    trx_header = { trx_state ~ whitespace* ~ ((trx_payee ~ whitespace* ~ trx_title) | trx_title) }
     trx_list = { (newline ~ comment* ~ account_statement){2,} }
-    trx_state = { ("*" | "!") }
+    trx_state = { ("*" | "!" | "#") }
+    trx_title =  { string }
+    trx_payee = { string }
     account_statement = {
-        whitespace* ~ account ~ (whitespace+ ~ amount_with_price?)? ~ comment*
+        whitespace* ~ account ~ (whitespace+ ~ (amount | amount_with_price)?)? ~ comment*
     }
-    amount_with_price = { amount ~ (whitespace* ~ "@" ~ whitespace* ~ price)? }
-    price = { amount }
+    amount_with_price = { amount ~ (whitespace* ~ "@" ~ whitespace* ~ amount) }
 
 date = @{ year ~ "-" ~ month ~ "-" ~ day_of_month }
     year = { ASCII_NONZERO_DIGIT ~ ASCII_DIGIT{,3} }

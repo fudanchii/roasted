@@ -1,239 +1,231 @@
-use crate::parser::{LedgerParser, Rule};
-use crate::LedgerError;
 use chrono::NaiveDate;
-use pest::Parser;
 use std::cmp::PartialEq;
 use std::collections::BTreeMap;
+use std::fmt;
+
+pub mod error {
+
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Account {
-    Assets(usize),
-    Expenses(usize),
-    Liabilities(usize),
-    Income(usize),
-    Equity(usize),
+    Assets(Vec<String>),
+    Expenses(Vec<String>),
+    Liabilities(Vec<String>),
+    Income(Vec<String>),
+    Equity(Vec<String>),
 }
 
+impl Account {
+    pub fn base_name(s: &str) -> Vec<String> {
+        s.split(':').skip(1).map(|s| s.to_string()).collect()
+    }
+}
+
+impl fmt::Display for Account {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Account::Assets(v) => write!(f, "Assets:{}", v.join(":")),
+            Account::Expenses(v) => write!(f, "Expenses:{}", v.join(":")),
+            Account::Liabilities(v) => write!(f, "Liabilities:{}", v.join(":")),
+            Account::Income(v) => write!(f, "Income:{}", v.join(":")),
+            Account::Equity(v) => write!(f, "Equity:{}", v.join(":")),
+        }
+    }
+}
+
+impl TryFrom<&str> for Account {
+    type Error = &'static str;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        if s.starts_with("Assets:") {
+            return Ok(Account::Assets(Account::base_name(s)));
+        }
+
+        if s.starts_with("Expenses:") {
+            return Ok(Account::Expenses(Account::base_name(s)));
+        }
+
+        if s.starts_with("Liabilities:") {
+            return Ok(Account::Liabilities(Account::base_name(s)));
+        }
+
+        if s.starts_with("Income:") {
+            return Ok(Account::Income(Account::base_name(s)));
+        }
+
+        if s.starts_with("Equity") {
+            return Ok(Account::Equity(Account::base_name(s)));
+        }
+
+        Err("input is not a valid Account")
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum TxnAccount {
+    Assets(Vec<usize>),
+    Expenses(Vec<usize>),
+    Liabilities(Vec<usize>),
+    Income(Vec<usize>),
+    Equity(Vec<usize>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct AccountActivities {
-    account_id: usize,
     opened_at: NaiveDate,
     closed_at: Option<NaiveDate>,
 }
 
-#[derive(Default)]
-struct AccountLabels(Vec<String>);
-
-impl AccountLabels {
-    pub fn new() -> Self {
-        Self(Vec::new())
-    }
-
-    pub fn account_name(&self, account: Account) -> Option<String> {
-        match account {
-            Account::Assets(idx) => self.0.get(idx).map(|label| format!("Assets{}", label)),
-            Account::Expenses(idx) => self.0.get(idx).map(|label| format!("Expenses{}", label)),
-            Account::Liabilities(idx) => {
-                self.0.get(idx).map(|label| format!("Liabilities{}", label))
-            }
-            Account::Income(idx) => self.0.get(idx).map(|label| format!("Income{}", label)),
-            Account::Equity(idx) => self.0.get(idx).map(|label| format!("Equity{}", label)),
-        }
-    }
-
-    pub fn pos(&self, account_name: &str) -> Option<usize> {
-        self.0.iter().position(|elt| elt == account_name)
-    }
-
-    pub fn pos_with_insert(&mut self, account_name: &str) -> usize {
-        let idx_candidate = self.0.iter().position(|elt| elt == account_name);
-        match idx_candidate {
-            Some(idx) => idx,
-            None => {
-                self.0.push(account_name.to_string());
-                self.0.len() - 1
-            }
-        }
-    }
-}
-
-#[derive(Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct AccountStore {
-    labels: AccountLabels,
-    accounts: Vec<Account>,
-    account_activities: Vec<AccountActivities>,
-    opened_upto_index: BTreeMap<NaiveDate, Vec<usize>>,
-    closed_at_index: BTreeMap<NaiveDate, Vec<usize>>,
-    need_indexing: bool,
+    segments: Vec<String>,
+    assets: BTreeMap<Vec<usize>, AccountActivities>,
+    expenses: BTreeMap<Vec<usize>, AccountActivities>,
+    liabilities: BTreeMap<Vec<usize>, AccountActivities>,
+    income: BTreeMap<Vec<usize>, AccountActivities>,
+    equity: BTreeMap<Vec<usize>, AccountActivities>,
 }
 
 impl AccountStore {
     pub fn new() -> Self {
-        AccountStore {
-            labels: AccountLabels::new(),
-            accounts: Vec::new(),
-            account_activities: Vec::new(),
-            opened_upto_index: BTreeMap::new(),
-            closed_at_index: BTreeMap::new(),
-            need_indexing: true,
-        }
+        Default::default()
     }
 
-    pub fn mapped_key(&self, date: &NaiveDate) -> Option<NaiveDate> {
-        self.opened_upto_index.get(date).map(|_| *date).or_else(|| {
-            self.opened_upto_index
-                .keys()
-                .filter(|&key| key <= date)
-                .cloned()
-                .last()
-        })
-    }
-
-    pub fn get_upto(&self, date: &NaiveDate) -> Result<Vec<Account>, LedgerError<()>> {
-        if self.need_indexing {
-            return Err(LedgerError::new("need to reindex before querying"));
-        }
-
-        let date_idx = self
-            .mapped_key(date)
-            .ok_or_else(|| LedgerError::new("given date is out of range"))?;
-        Ok(self
-            .opened_upto_index
-            .get(&date_idx)
-            .unwrap()
-            .iter()
-            .map(|&idx| self.accounts[idx].clone())
-            .collect())
-    }
-
-    pub fn open(&mut self, date: NaiveDate, accstr: &str) {
-        let mut pairs =
-            LedgerParser::parse(Rule::account, accstr).unwrap_or_else(|e| panic!("{}", e));
-        let mut segments = pairs.next().unwrap().into_inner();
-        let account_prefix = segments.next().unwrap().as_str();
-        let account_name = segments.next().unwrap().as_str();
-        let idx = self.labels.pos_with_insert(account_name);
-
-        let account = match account_prefix {
-            "Assets" => Account::Assets(idx),
-            "Expenses" => Account::Expenses(idx),
-            "Liabilities" => Account::Liabilities(idx),
-            "Income" => Account::Income(idx),
-            "Equity" => Account::Equity(idx),
-            _ => panic!("Unknown account type: {}", account_prefix),
-        };
-
-        let account_idx_candidate = self.accounts.iter().position(|a| a == &account);
-        let account_idx = match account_idx_candidate {
-            None => {
-                self.accounts.push(account);
-                self.accounts.len() - 1
-            }
-            Some(idx) => idx,
-        };
-
-        self.account_activities.push(AccountActivities {
-            account_id: idx,
-            opened_at: date,
-            closed_at: None,
-        });
-
-        match self.opened_upto_index.get_mut(&date) {
-            None => {
-                self.opened_upto_index.insert(date, vec![account_idx]);
-            }
-            Some(index) => {
-                index.push(account_idx);
+    fn index_segments(&mut self, v: &Vec<String>) -> Vec<usize> {
+        let mut idxs: Vec<usize> = Vec::new();
+        for segment in v {
+            if let Some(ppos) = self.segments.iter().position(|s| s == segment) {
+                idxs.push(ppos);
+            } else {
+                self.segments.push(segment.clone());
+                idxs.push(self.segments.len() - 1);
             }
         }
 
-        self.need_indexing = true;
+        idxs
     }
 
-    pub fn close(&mut self, date: NaiveDate, accstr: &str) -> Result<(), LedgerError<String>> {
-        let mut pairs =
-            LedgerParser::parse(Rule::account, accstr).unwrap_or_else(|e| panic!("{}", e));
-        let mut segments = pairs.next().unwrap().into_inner();
-        let account_prefix = segments.next().unwrap().as_str();
-        let account_name = segments.next().unwrap().as_str();
-        let idx = self.labels.pos(account_name).ok_or_else(|| {
-            LedgerError::new("account not exist").with_context(accstr.to_string())
-        })?;
-
-        let account = match account_prefix {
-            "Assets" => Account::Assets(idx),
-            "Expenses" => Account::Expenses(idx),
-            "Liabilities" => Account::Liabilities(idx),
-            "Income" => Account::Income(idx),
-            "Equity" => Account::Equity(idx),
-            _ => panic!("Unknown account type: {}", account_prefix),
-        };
-
-        let account_idx = self
-            .accounts
-            .iter()
-            .position(|elt| elt == &account)
-            .ok_or_else(|| {
-                LedgerError::new("account not exist").with_context(accstr.to_string())
-            })?;
-
-        // insert entry for closed_at_index
-        let entry_candidate = self.closed_at_index.get_mut(&date);
-        match entry_candidate {
-            None => {
-                self.closed_at_index.insert(date, vec![account_idx]);
-            }
-            Some(entry) => {
-                if entry.contains(&account_idx) {
-                    return Err(
-                        LedgerError::new("duplicate account").with_context(accstr.to_string())
-                    );
-                }
-                entry.push(account_idx);
-            }
+    fn lookup_index(&self, v: &Vec<String>) -> Option<Vec<usize>> {
+        let mut idxs: Vec<usize> = Vec::new();
+        for segment in v {
+            let pos = self.segments.iter().position(|s| s == segment)?;
+            idxs.push(pos);
         }
 
-        // insert empty entry for opened_upto_index
-        // so we can have correct index calculation later
-        if None == self.opened_upto_index.get_mut(&date) {
-            self.opened_upto_index.insert(date, vec![]);
+        Some(idxs)
+    }
+
+    pub fn open(&mut self, acc: &Account, at: NaiveDate) -> Result<(), &'static str> {
+        match acc {
+            Account::Assets(val) => {
+                let idxs = self.index_segments(val);
+                self.assets.insert(idxs, AccountActivities{opened_at: at, closed_at: None});
+            },
+            Account::Expenses(val) => {
+                let idxs = self.index_segments(val);
+                self.expenses.insert(idxs, AccountActivities{opened_at: at, closed_at: None});
+            },
+            Account::Liabilities(val) => {
+                let idxs = self.index_segments(val);
+                self.liabilities.insert(idxs, AccountActivities{opened_at: at, closed_at: None});
+            },
+            Account::Income(val) => {
+                let idxs = self.index_segments(val);
+                self.income.insert(idxs, AccountActivities{opened_at: at, closed_at: None});
+            },
+            Account::Equity(val) => {
+                let idxs = self.index_segments(val);
+                self.equity.insert(idxs, AccountActivities{opened_at: at, closed_at: None});
+            },
         }
 
         Ok(())
     }
 
-    pub fn reindex(&mut self) -> Result<(), LedgerError<String>> {
-        let indexes: Vec<NaiveDate> = self.opened_upto_index.keys().cloned().collect();
-        let mut account_buffer: Vec<usize> = Vec::new();
-        for date in indexes.iter() {
-            let entry = self.opened_upto_index.get_mut(date).unwrap();
-            for idx in entry.clone() {
-                if account_buffer.contains(&idx) {
-                    return Err(LedgerError::new("duplicated account").with_context(
-                        self.labels
-                            .account_name(self.accounts[idx].clone())
-                            .unwrap(),
-                    ));
-                }
-                account_buffer.push(idx);
-            }
-            if let Some(closed_entry) = self.closed_at_index.get(date) {
-                account_buffer = account_buffer
-                    .iter()
-                    .filter(|account| !closed_entry.contains(account))
-                    .cloned()
-                    .collect();
-            };
-            entry.clear();
-            entry.append(&mut account_buffer.clone());
-        }
-        self.need_indexing = false;
+    fn close_account(
+        account_set: &mut BTreeMap<Vec<usize>, AccountActivities>,
+        idxs: &Vec<usize>,
+        at: NaiveDate,
+    ) -> Result<(), &'static str> {
+        account_set.get_mut(idxs).map(|activity| activity.closed_at = Some(at))
+            .ok_or("valid account with no activities")
+    }
+
+    pub fn close(&mut self, acc: &Account, at: NaiveDate) -> Result<(), &'static str> {
+        let txn_acc = self.txnify(acc, at)?;
+        match txn_acc {
+            TxnAccount::Assets(idxs) => Self::close_account(&mut self.assets, &idxs, at)?,
+            TxnAccount::Expenses(idxs) => Self::close_account(&mut self.expenses, &idxs, at)?,
+            TxnAccount::Liabilities(idxs) => Self::close_account(&mut self.liabilities, &idxs, at)?,
+            TxnAccount::Income(idxs) => Self::close_account(&mut self.income, &idxs, at)?,
+            TxnAccount::Equity(idxs) => Self::close_account(&mut self.equity, &idxs, at)?,
+        };
+
         Ok(())
+    }
+
+    fn txn_account_valid_at(&self, date: NaiveDate, txn_acct: TxnAccount) -> Option<TxnAccount> {
+        let activities = match &txn_acct {
+            TxnAccount::Assets(idxs) => self.assets.get(idxs),
+            TxnAccount::Expenses(idxs) => self.expenses.get(idxs),
+            TxnAccount::Liabilities(idxs) => self.liabilities.get(idxs),
+            TxnAccount::Income(idxs) => self.income.get(idxs),
+            TxnAccount::Equity(idxs) => self.equity.get(idxs),
+        };
+        if let Some(activity) = activities {
+            match activity.closed_at {
+                Some(cdate) => {
+                    if activity.opened_at <= date && cdate > date {
+                        return Some(txn_acct);
+                    }
+                },
+                None => {
+                    if activity.opened_at <= date {
+                        return Some(txn_acct);
+                    }
+                },
+            }
+        }
+        None
+    }
+
+    pub fn txnify(&self, acc: &Account, date: NaiveDate) -> Result<TxnAccount, &'static str> {
+        let txn_account = match acc {
+            Account::Assets(val) => self.lookup_index(val).map(|idxs| TxnAccount::Assets(idxs)),
+            Account::Expenses(val) => self.lookup_index(val).map(|idxs| TxnAccount::Expenses(idxs)),
+            Account::Liabilities(val) => self.lookup_index(val).map(|idxs| TxnAccount::Liabilities(idxs)),
+            Account::Income(val) => self.lookup_index(val).map(|idxs| TxnAccount::Income(idxs)),
+            Account::Equity(val) => self.lookup_index(val).map(|idxs| TxnAccount::Equity(idxs)),
+        };
+
+        txn_account.and_then(|txnacct| self.txn_account_valid_at(date, txnacct))
+            .ok_or("unopened account")
+    }
+
+    fn lookup_segments(&self, v: &Vec<usize>) -> Result<Vec<String>, &'static str> {
+        let mut segments = Vec::new();
+        for &idx in v {
+            let segment = self.segments.get(idx).ok_or("undefined account")?;
+            segments.push(segment.clone());
+        }
+        Ok(segments)
+    }
+
+    pub fn accountify(&self, actxn: &TxnAccount) -> Result<Account, &'static str> {
+        match actxn {
+            TxnAccount::Assets(idxs) => Ok(Account::Assets(self.lookup_segments(idxs)?)),
+            TxnAccount::Expenses(idxs) => Ok(Account::Expenses(self.lookup_segments(idxs)?)),
+            TxnAccount::Liabilities(idxs) => Ok(Account::Liabilities(self.lookup_segments(idxs)?)),
+            TxnAccount::Income(idxs) => Ok(Account::Income(self.lookup_segments(idxs)?)),
+            TxnAccount::Equity(idxs) => Ok(Account::Equity(self.lookup_segments(idxs)?)),
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::account::{Account, AccountStore};
+    use crate::account::{Account, TxnAccount, AccountStore};
     use chrono::NaiveDate;
 
     #[test]
@@ -241,78 +233,16 @@ mod tests {
         let mut store = AccountStore::new();
         let date1 = NaiveDate::from_ymd(2021, 10, 25);
         let date2 = NaiveDate::from_ymd(2021, 10, 28);
-        let date_query = NaiveDate::from_ymd(2021, 11, 1);
-        store.open(date1, "Assets:Bank:Jawir");
-        store.open(date2, "Expenses:Dining");
-        store
-            .reindex()
-            .unwrap_or_else(|err| panic!("{:?}", err));
+        let account1: Account = "Assets:Bank:Jawir".try_into().unwrap();
+        let account2: Account = "Expenses:Dining".try_into().unwrap();
+        store.open(&account1, date1);
+        store.open(&account2, date2);
+        assert_eq!(store.txnify(&account1, date1), Ok(TxnAccount::Assets(vec![0, 1])));
+        assert_eq!(store.txnify(&account2, date2), Ok(TxnAccount::Expenses(vec![2])));
+        assert_eq!(store.txnify(&account2, date1), Err("unopened account"));
         assert_eq!(
-            store.get_upto(&date_query).unwrap(),
-            vec![Account::Assets(0), Account::Expenses(1)]
-        );
-        assert_eq!(
-            store.labels.account_name(Account::Assets(0)).unwrap(),
-            "Assets:Bank:Jawir"
-        );
-    }
-
-    #[test]
-    fn test_close_account() {
-        let mut store = AccountStore::new();
-        let date1 = NaiveDate::from_ymd(2020, 1, 25);
-        let date2 = NaiveDate::from_ymd(2021, 10, 28);
-        let date3 = NaiveDate::from_ymd(2021, 10, 30);
-        let date_query1 = NaiveDate::from_ymd(2021, 10, 29);
-        let date_query2 = NaiveDate::from_ymd(2021, 11, 1);
-        store.open(date1, "Assets:Bank:Jawir");
-        store.open(date2, "Expenses:Dining");
-        store
-            .close(date3, "Assets:Bank:Jawir")
-            .unwrap_or_else(|err| panic!("{:?}", err));
-        store
-            .reindex()
-            .unwrap_or_else(|err| panic!("{:?}", err));
-        assert_eq!(
-            store.get_upto(&date_query1).unwrap(),
-            vec![Account::Assets(0), Account::Expenses(1)]
-        );
-        assert_eq!(
-            store.get_upto(&date_query2).unwrap(),
-            vec![Account::Expenses(1)]
-        );
-    }
-
-    #[test]
-    fn test_reopen_account() {
-        let mut store = AccountStore::new();
-        let date1 = NaiveDate::from_ymd(2020, 1, 25);
-        let date2 = NaiveDate::from_ymd(2021, 10, 28);
-        let date3 = NaiveDate::from_ymd(2021, 10, 30);
-        let date4 = NaiveDate::from_ymd(2021, 11, 15);
-        let date_query1 = NaiveDate::from_ymd(2021, 10, 29);
-        let date_query2 = NaiveDate::from_ymd(2021, 11, 1);
-        let date_query3 = NaiveDate::from_ymd(2021, 11, 15);
-        store.open(date1, "Assets:Bank:Jawir");
-        store.open(date2, "Expenses:Dining");
-        store
-            .close(date3, "Assets:Bank:Jawir")
-            .unwrap_or_else(|err| panic!("{:?}", err));
-        store.open(date4, "Assets:Bank:Jawir");
-        store
-            .reindex()
-            .unwrap_or_else(|err| panic!("{:?}", err));
-        assert_eq!(
-            store.get_upto(&date_query1).unwrap(),
-            vec![Account::Assets(0), Account::Expenses(1)]
-        );
-        assert_eq!(
-            store.get_upto(&date_query2).unwrap(),
-            vec![Account::Expenses(1)]
-        );
-        assert_eq!(
-            store.get_upto(&date_query3).unwrap(),
-            vec![Account::Expenses(1), Account::Assets(0)]
+            format!("{}", store.accountify(&TxnAccount::Assets(vec![0, 1])).unwrap()),
+            "Assets:Bank:Jawir",
         );
     }
 }

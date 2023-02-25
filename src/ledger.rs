@@ -1,23 +1,10 @@
-use crate::account::{AccountStore, Account};
+use crate::{account::{AccountStore, Account}, transaction::Transaction};
 use crate::statement::Statement;
 use chrono::naive::NaiveDate;
 use std::collections::{BTreeMap, HashMap};
 
-pub enum TransactionState {
-    Settled,
-    Unsettled,
-    Recurring,
-    Virtual,
-}
-
-pub struct Transaction {
-    state: TransactionState,
-    payee: Option<String>,
-    header: String,
-    accounts: Vec<Account>,
-    exchanges: Vec<f64>,
-    currency: usize,
-}
+use crate::parser::Rule;
+use pest::iterators::Pair;
 
 pub struct BalanceAssertion {
     account: Account,
@@ -58,7 +45,7 @@ impl DayBook {
 pub struct Ledger {
     accounts: AccountStore,
     currencies: Vec<String>,
-    transactions: BTreeMap<NaiveDate, DayBook>,
+    bookings: BTreeMap<NaiveDate, DayBook>,
     options: HashMap<String, String>,
 }
 
@@ -67,7 +54,7 @@ impl Ledger {
         Ledger {
             accounts: AccountStore::new(),
             currencies: Vec::new(),
-            transactions: BTreeMap::new(),
+            bookings: BTreeMap::new(),
             options: HashMap::new(),
         }
     }
@@ -83,27 +70,22 @@ impl Ledger {
     pub fn process_statement(&mut self, statement: Statement) {
         match statement {
             Statement::Custom(date, args) => self.process_custom_statement(date, args),
-            Statement::OpenAccount(date, account) => self.process_open_account(date, account),
-            Statement::CloseAccount(date, account) => self.process_close_account(date, account),
+            Statement::Transaction(date, h, txn) => self.process_transaction_statement(date, h, txn),
             _ => unreachable!(),
         }
     }
 
     pub fn get_mut_at(&mut self, date: &NaiveDate) -> Option<&mut DayBook> {
-        self.transactions.get_mut(date)
+        self.bookings.get_mut(date)
     }
 
     pub fn get_at(&self, date: &NaiveDate) -> Option<&DayBook> {
-        self.transactions.get(date)
-    }
-
-    pub fn reindex(&mut self) {
-        self.accounts.reindex().unwrap();
+        self.bookings.get(date)
     }
 
     fn process_custom_statement(&mut self, date: NaiveDate, args: Vec<&str>) {
-        let wrap = self.get_mut_at(&date);
-        match wrap {
+        let bookwrap = self.get_mut_at(&date);
+        match bookwrap {
             Some(book) => {
                 book.custom
                     .push(args.iter().map(|s| s.to_string()).collect());
@@ -112,19 +94,12 @@ impl Ledger {
                 let mut book = DayBook::new();
                 book.custom
                     .push(args.iter().map(|s| s.to_string()).collect());
-                self.transactions.insert(date, book);
+                self.bookings.insert(date, book);
             }
         }
     }
 
-    fn process_open_account(&mut self, date: NaiveDate, accstr: &str) {
-        self.accounts.open(date, accstr);
-    }
-
-    fn process_close_account(&mut self, date: NaiveDate, accstr: &str) {
-        self.accounts
-            .close(date, accstr)
-            .unwrap_or_else(|err| panic!("{:?}", err));
+    fn process_transaction_statement(&mut self, date: NaiveDate, header: Pair<'_, Rule>, txn: Pair<'_, Rule>) {
     }
 }
 
