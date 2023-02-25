@@ -1,7 +1,7 @@
 use crate::statement::Statement;
 use crate::{
-    account::{TxnAccount, AccountStore},
-    transaction::Transaction,
+    account::{AccountStore, TxnAccount},
+    transaction::{Transaction, TxnHeader, TxnList},
 };
 use chrono::naive::NaiveDate;
 use std::collections::{BTreeMap, HashMap};
@@ -49,6 +49,7 @@ pub struct Ledger {
     accounts: AccountStore,
     bookings: BTreeMap<NaiveDate, DayBook>,
     options: HashMap<String, String>,
+    currencies: Vec<String>,
 }
 
 impl Ledger {
@@ -57,6 +58,7 @@ impl Ledger {
             accounts: AccountStore::new(),
             bookings: BTreeMap::new(),
             options: HashMap::new(),
+            currencies: Vec::new(),
         }
     }
 
@@ -102,8 +104,8 @@ impl Ledger {
     fn process_transaction_statement(
         &mut self,
         date: NaiveDate,
-        header: Pair<'_, Rule>,
-        txn: Pair<'_, Rule>,
+        header: TxnHeader<'_>,
+        txn: TxnList<'_>,
     ) {
     }
 }

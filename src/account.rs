@@ -227,7 +227,11 @@ impl AccountStore {
         None
     }
 
-    pub fn txnify<'a>(&self, acc: &Account<'a>, date: NaiveDate) -> Result<TxnAccount, &'static str> {
+    pub fn txnify<'a>(
+        &self,
+        acc: &Account<'a>,
+        date: NaiveDate,
+    ) -> Result<TxnAccount, &'static str> {
         let txn_account = match acc {
             Account::Assets(val) => self.lookup_index(val).map(|idxs| TxnAccount::Assets(idxs)),
             Account::Expenses(val) => self

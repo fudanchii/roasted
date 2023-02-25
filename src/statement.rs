@@ -1,9 +1,9 @@
 use crate::account::Account;
 use crate::amount::Amount;
 use crate::parser::{inner_str, Rule};
+use crate::transaction::{TxnHeader, TxnList};
 use chrono::NaiveDate;
 use pest::iterators::Pair;
-use std::cmp::PartialEq;
 
 #[derive(Debug, PartialEq)]
 pub enum Statement<'s> {
@@ -12,7 +12,7 @@ pub enum Statement<'s> {
     CloseAccount(NaiveDate, Account<'s>),
     Pad(NaiveDate, Account<'s>, Account<'s>),
     Balance(NaiveDate, Account<'s>, Amount<'s>),
-    Transaction(NaiveDate, Pair<'s, Rule>, Pair<'s, Rule>),
+    Transaction(NaiveDate, TxnHeader<'s>, TxnList<'s>),
 }
 
 impl<'s> From<Pair<'s, Rule>> for Statement<'s> {
@@ -47,9 +47,11 @@ impl<'s> Statement<'s> {
                 Account::parse(pairs.next().unwrap()).unwrap(),
                 Amount::parse(pairs.next().unwrap()).unwrap(),
             ),
-            Rule::transaction => {
-                Self::Transaction(date, pairs.next().unwrap(), pairs.next().unwrap())
-            }
+            Rule::transaction => Self::Transaction(
+                date,
+                TxnHeader::parse(pairs.next().unwrap()).unwrap(),
+                TxnList::parse(pairs.next().unwrap()).unwrap(),
+            ),
             _ => unreachable!(),
         }
     }
@@ -61,6 +63,7 @@ mod tests {
     use crate::amount::Amount;
     use crate::parser::{LedgerParser, Rule};
     use crate::statement::Statement;
+    use crate::transaction::{TransactionState, TxnHeader, TxnList};
     use chrono::NaiveDate;
     use pest::Parser;
 
@@ -158,12 +161,29 @@ mod tests {
         .unwrap_or_else(|e| panic!("{}", e));
         let statement = Statement::from(ast.next().unwrap());
         assert_eq!(
-            if let Statement::Transaction(_, header, _) = statement {
-                header.as_str()
-            } else {
-                ""
-            },
-            r#"* "Gubuk mang Engking" "Splurge @ diner""#,
+            statement,
+            Statement::Transaction(
+                NaiveDate::from_ymd(2021, 4, 1),
+                TxnHeader {
+                    state: TransactionState::Settled,
+                    payee: Some("Gubuk mang Engking"),
+                    title: "Splurge @ diner",
+                },
+                TxnList {
+                    accounts: vec![
+                        Account::Assets(vec!["Cash"]),
+                        Account::Expenses(vec!["Dining"]),
+                    ],
+                    exchanges: vec![
+                        None,
+                        Some(Amount {
+                            nominal: 50f64,
+                            currency: "USD",
+                            price: None,
+                        }),
+                    ],
+                }
+            )
         );
     }
 }

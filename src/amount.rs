@@ -39,6 +39,13 @@ impl<'a> Amount<'a> {
     }
 }
 
+#[derive(Debug, PartialEq)]
+pub struct TxnAmount {
+    nominal: f64,
+    currency: usize,
+    price: Option<Box<TxnAmount>>,
+}
+
 #[cfg(test)]
 mod tests {
     use crate::amount::Amount;
