@@ -3,9 +3,9 @@ use pest::iterators::Pair;
 
 #[derive(Debug, PartialEq)]
 pub struct Amount {
-    nominal: f64,
-    currency: String,
-    price: Option<Box<Amount>>,
+    pub(crate) nominal: f64,
+    pub(crate) currency: String,
+    pub(crate) price: Option<Box<Amount>>,
 }
 
 impl<'a> Amount {
@@ -28,6 +28,14 @@ impl<'a> Amount {
             }
             _ => unreachable!(),
         }
+    }
+
+    pub fn nominal(&self) -> f64 {
+        self.nominal
+    }
+
+    pub fn currency(&self) -> &str {
+        &self.currency
     }
 }
 

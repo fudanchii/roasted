@@ -62,9 +62,8 @@ mod tests {
 
     #[test]
     fn parse_custom_statement() {
-        let mut ast =
-            LedgerParser::parse(Rule::statement, "2021-01-01 custom \"author\" \"udhin\"")
-                .unwrap_or_else(|e| panic!("{}", e));
+        let mut ast = LedgerParser::parse(Rule::statement, r#"2021-01-01 custom "author" "udhin""#)
+            .unwrap_or_else(|e| panic!("{}", e));
         let statement = Statement::from(ast.next().unwrap());
         assert_eq!(
             statement,
@@ -126,15 +125,16 @@ mod tests {
         )
         .unwrap_or_else(|e| panic!("{}", e));
         let statement = Statement::from(ast.next().unwrap());
-        let mut amount_ast =
-            LedgerParser::parse(Rule::amount, "65750.55 USD").unwrap_or_else(|e| panic!("{}", e));
-        let amount = Amount::parse(amount_ast.next().unwrap()).unwrap();
         assert_eq!(
             statement,
             Statement::Balance(
                 NaiveDate::from_ymd(2021, 2, 28),
                 Account::Assets(vec!["Cash".to_string(), "OnHand".to_string()]),
-                amount
+                Amount {
+                    nominal: 65750.55f64,
+                    currency: "USD".to_string(),
+                    price: None,
+                }
             )
         );
     }
