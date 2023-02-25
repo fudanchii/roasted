@@ -1,5 +1,8 @@
-use crate::{account::{AccountStore, Account}, transaction::Transaction};
 use crate::statement::Statement;
+use crate::{
+    account::{Account, AccountStore},
+    transaction::Transaction,
+};
 use chrono::naive::NaiveDate;
 use std::collections::{BTreeMap, HashMap};
 
@@ -70,7 +73,9 @@ impl Ledger {
     pub fn process_statement(&mut self, statement: Statement) {
         match statement {
             Statement::Custom(date, args) => self.process_custom_statement(date, args),
-            Statement::Transaction(date, h, txn) => self.process_transaction_statement(date, h, txn),
+            Statement::Transaction(date, h, txn) => {
+                self.process_transaction_statement(date, h, txn)
+            }
             _ => unreachable!(),
         }
     }
@@ -99,7 +104,12 @@ impl Ledger {
         }
     }
 
-    fn process_transaction_statement(&mut self, date: NaiveDate, header: Pair<'_, Rule>, txn: Pair<'_, Rule>) {
+    fn process_transaction_statement(
+        &mut self,
+        date: NaiveDate,
+        header: Pair<'_, Rule>,
+        txn: Pair<'_, Rule>,
+    ) {
     }
 }
 

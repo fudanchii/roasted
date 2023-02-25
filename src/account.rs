@@ -3,9 +3,10 @@ use std::cmp::PartialEq;
 use std::collections::BTreeMap;
 use std::fmt;
 
-pub mod error {
+use crate::parser::Rule;
+use pest::iterators::Pair;
 
-}
+pub mod error {}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Account {
@@ -19,6 +20,10 @@ pub enum Account {
 impl Account {
     pub fn base_name(s: &str) -> Vec<String> {
         s.split(':').skip(1).map(|s| s.to_string()).collect()
+    }
+
+    pub fn parse(token: Pair<'_, Rule>) -> Result<Self, &'static str> {
+        token.as_str().try_into()
     }
 }
 
@@ -120,24 +125,54 @@ impl AccountStore {
         match acc {
             Account::Assets(val) => {
                 let idxs = self.index_segments(val);
-                self.assets.insert(idxs, AccountActivities{opened_at: at, closed_at: None});
-            },
+                self.assets.insert(
+                    idxs,
+                    AccountActivities {
+                        opened_at: at,
+                        closed_at: None,
+                    },
+                );
+            }
             Account::Expenses(val) => {
                 let idxs = self.index_segments(val);
-                self.expenses.insert(idxs, AccountActivities{opened_at: at, closed_at: None});
-            },
+                self.expenses.insert(
+                    idxs,
+                    AccountActivities {
+                        opened_at: at,
+                        closed_at: None,
+                    },
+                );
+            }
             Account::Liabilities(val) => {
                 let idxs = self.index_segments(val);
-                self.liabilities.insert(idxs, AccountActivities{opened_at: at, closed_at: None});
-            },
+                self.liabilities.insert(
+                    idxs,
+                    AccountActivities {
+                        opened_at: at,
+                        closed_at: None,
+                    },
+                );
+            }
             Account::Income(val) => {
                 let idxs = self.index_segments(val);
-                self.income.insert(idxs, AccountActivities{opened_at: at, closed_at: None});
-            },
+                self.income.insert(
+                    idxs,
+                    AccountActivities {
+                        opened_at: at,
+                        closed_at: None,
+                    },
+                );
+            }
             Account::Equity(val) => {
                 let idxs = self.index_segments(val);
-                self.equity.insert(idxs, AccountActivities{opened_at: at, closed_at: None});
-            },
+                self.equity.insert(
+                    idxs,
+                    AccountActivities {
+                        opened_at: at,
+                        closed_at: None,
+                    },
+                );
+            }
         }
 
         Ok(())
@@ -148,7 +183,9 @@ impl AccountStore {
         idxs: &Vec<usize>,
         at: NaiveDate,
     ) -> Result<(), &'static str> {
-        account_set.get_mut(idxs).map(|activity| activity.closed_at = Some(at))
+        account_set
+            .get_mut(idxs)
+            .map(|activity| activity.closed_at = Some(at))
             .ok_or("valid account with no activities")
     }
 
@@ -179,12 +216,12 @@ impl AccountStore {
                     if activity.opened_at <= date && cdate > date {
                         return Some(txn_acct);
                     }
-                },
+                }
                 None => {
                     if activity.opened_at <= date {
                         return Some(txn_acct);
                     }
-                },
+                }
             }
         }
         None
@@ -193,13 +230,18 @@ impl AccountStore {
     pub fn txnify(&self, acc: &Account, date: NaiveDate) -> Result<TxnAccount, &'static str> {
         let txn_account = match acc {
             Account::Assets(val) => self.lookup_index(val).map(|idxs| TxnAccount::Assets(idxs)),
-            Account::Expenses(val) => self.lookup_index(val).map(|idxs| TxnAccount::Expenses(idxs)),
-            Account::Liabilities(val) => self.lookup_index(val).map(|idxs| TxnAccount::Liabilities(idxs)),
+            Account::Expenses(val) => self
+                .lookup_index(val)
+                .map(|idxs| TxnAccount::Expenses(idxs)),
+            Account::Liabilities(val) => self
+                .lookup_index(val)
+                .map(|idxs| TxnAccount::Liabilities(idxs)),
             Account::Income(val) => self.lookup_index(val).map(|idxs| TxnAccount::Income(idxs)),
             Account::Equity(val) => self.lookup_index(val).map(|idxs| TxnAccount::Equity(idxs)),
         };
 
-        txn_account.and_then(|txnacct| self.txn_account_valid_at(date, txnacct))
+        txn_account
+            .and_then(|txnacct| self.txn_account_valid_at(date, txnacct))
             .ok_or("unopened account")
     }
 
@@ -225,7 +267,7 @@ impl AccountStore {
 
 #[cfg(test)]
 mod tests {
-    use crate::account::{Account, TxnAccount, AccountStore};
+    use crate::account::{Account, AccountStore, TxnAccount};
     use chrono::NaiveDate;
 
     #[test]
@@ -237,11 +279,20 @@ mod tests {
         let account2: Account = "Expenses:Dining".try_into().unwrap();
         store.open(&account1, date1);
         store.open(&account2, date2);
-        assert_eq!(store.txnify(&account1, date1), Ok(TxnAccount::Assets(vec![0, 1])));
-        assert_eq!(store.txnify(&account2, date2), Ok(TxnAccount::Expenses(vec![2])));
+        assert_eq!(
+            store.txnify(&account1, date1),
+            Ok(TxnAccount::Assets(vec![0, 1]))
+        );
+        assert_eq!(
+            store.txnify(&account2, date2),
+            Ok(TxnAccount::Expenses(vec![2]))
+        );
         assert_eq!(store.txnify(&account2, date1), Err("unopened account"));
         assert_eq!(
-            format!("{}", store.accountify(&TxnAccount::Assets(vec![0, 1])).unwrap()),
+            format!(
+                "{}",
+                store.accountify(&TxnAccount::Assets(vec![0, 1])).unwrap()
+            ),
             "Assets:Bank:Jawir",
         );
     }

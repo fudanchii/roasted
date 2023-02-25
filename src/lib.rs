@@ -20,10 +20,10 @@ extern crate pest_derive;
 /// transactions using the closed account, and will allow it again when its reopened.
 pub mod account;
 
+mod amount;
 /// Ledger representation.
 pub mod ledger;
 mod parser;
-mod amount;
 mod statement;
 mod transaction;
 

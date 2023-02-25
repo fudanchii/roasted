@@ -1,6 +1,6 @@
 use crate::account::Account;
-use crate::parser::{inner_str, Rule};
 use crate::amount::Amount;
+use crate::parser::{inner_str, Rule};
 use chrono::NaiveDate;
 use pest::iterators::Pair;
 use std::cmp::PartialEq;
@@ -40,14 +40,12 @@ impl<'a> Statement<'a> {
             ),
             Rule::balance_statement => Self::Balance(
                 date,
-                pairs.next().unwrap().as_str().try_into().unwrap(),
+                Account::parse(pairs.next().unwrap()).unwrap(),
                 Amount::parse(pairs.next().unwrap()).unwrap(),
             ),
-            Rule::transaction => Self::Transaction(
-                date,
-                pairs.next().unwrap(),
-                pairs.next().unwrap(),
-            ),
+            Rule::transaction => {
+                Self::Transaction(date, pairs.next().unwrap(), pairs.next().unwrap())
+            }
             _ => unreachable!(),
         }
     }
@@ -128,7 +126,8 @@ mod tests {
         )
         .unwrap_or_else(|e| panic!("{}", e));
         let statement = Statement::from(ast.next().unwrap());
-        let mut amount_ast = LedgerParser::parse(Rule::amount, "65750.55 USD").unwrap_or_else(|e| panic!("{}", e));
+        let mut amount_ast =
+            LedgerParser::parse(Rule::amount, "65750.55 USD").unwrap_or_else(|e| panic!("{}", e));
         let amount = Amount::parse(amount_ast.next().unwrap()).unwrap();
         assert_eq!(
             statement,
@@ -152,7 +151,11 @@ mod tests {
         .unwrap_or_else(|e| panic!("{}", e));
         let statement = Statement::from(ast.next().unwrap());
         assert_eq!(
-            if let Statement::Transaction(_, header, _) = statement { header.as_str() } else { "" },
+            if let Statement::Transaction(_, header, _) = statement {
+                header.as_str()
+            } else {
+                ""
+            },
             r#"* "Gubuk mang Engking" "Splurge @ diner""#,
         );
     }
