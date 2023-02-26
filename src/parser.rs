@@ -1,27 +1,34 @@
 use crate::ledger::Ledger;
-use pest::error::Error;
 use pest::iterators::Pair;
 use pest::Parser;
+
+use std::fs;
+use std::path::Path;
 
 #[derive(Parser)]
 #[grammar = "ledger.pest"]
 pub struct LedgerParser;
 
-/// Parses ledger input as string slice, we are not concerning ourselves
-/// with file input, so reading from files will need to be handled by the client code.
-pub fn parse(input: &str) -> Result<Ledger, Error<Rule>> {
-    let statements = LedgerParser::parse(Rule::ledger, input)?;
+pub fn parse_file(path: &Path, carried_ledger: Option<Ledger>) -> anyhow::Result<Ledger> {
+    if carried_ledger.is_none() {
+        return parse_file(path, Some(Ledger::new()));
+    }
 
-    let mut ledger = Ledger::new();
+    let fcontent = fs::read_to_string(path)?;
+    parse(&fcontent, carried_ledger)
+}
+
+pub fn parse(input: &str, carried_ledger: Option<Ledger>) -> anyhow::Result<Ledger> {
+    if carried_ledger.is_none() {
+        return parse(input, Some(Ledger::new()));
+    }
+
+    let statements = LedgerParser::parse(Rule::ledger, input)?;
+    let mut ledger = carried_ledger.unwrap();
 
     for statement in statements {
         match statement.as_rule() {
-            Rule::option => {
-                let mut option = statement.into_inner(); // "<key>" "<value>"
-                let key = inner_str(option.next().unwrap()); // <key>
-                let val = inner_str(option.next().unwrap()); // <value>
-                ledger.set_option(key, val);
-            }
+            Rule::option => ledger.parse_option(statement).map_err(anyhow::Error::msg)?,
             Rule::statement => ledger.process_statement(statement.into()),
             _ => unreachable!(),
         }

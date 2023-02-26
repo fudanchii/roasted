@@ -1,6 +1,7 @@
-use crate::statement::Statement;
 use crate::{
     account::{AccountStore, TxnAccount},
+    parser::inner_str,
+    statement::Statement,
     transaction::{Transaction, TxnHeader, TxnList},
 };
 use chrono::naive::NaiveDate;
@@ -60,6 +61,14 @@ impl Ledger {
             options: HashMap::new(),
             currencies: Vec::new(),
         }
+    }
+
+    pub fn parse_option(&mut self, token: Pair<Rule>) -> Result<(), &'static str> {
+        let mut option = token.into_inner();
+        let key = inner_str(option.next().ok_or("invalid token")?);
+        let val = inner_str(option.next().ok_or("invalid token")?);
+        self.set_option(key, val);
+        Ok(())
     }
 
     pub fn set_option(&mut self, key: &str, val: &str) {
