@@ -275,14 +275,14 @@ mod tests {
     use chrono::NaiveDate;
 
     #[test]
-    fn test_open_account() {
+    fn test_open_account() -> Result<(), &'static str> {
         let mut store = AccountStore::new();
         let date1 = NaiveDate::from_ymd(2021, 10, 25);
         let date2 = NaiveDate::from_ymd(2021, 10, 28);
         let account1: Account = "Assets:Bank:Jawir".try_into().unwrap();
         let account2: Account = "Expenses:Dining".try_into().unwrap();
-        store.open(&account1, date1);
-        store.open(&account2, date2);
+        store.open(&account1, date1)?;
+        store.open(&account2, date2)?;
         assert_eq!(
             store.txnify(&account1, date1),
             Ok(TxnAccount::Assets(vec![0, 1]))
@@ -299,5 +299,6 @@ mod tests {
             ),
             "Assets:Bank:Jawir",
         );
+        Ok(())
     }
 }
