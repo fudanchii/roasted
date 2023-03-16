@@ -28,6 +28,16 @@ impl<'s> TryFrom<Pair<'s, Rule>> for Statement<'s> {
     }
 }
 
+macro_rules! account_parse {
+    ($pairs:ident) => {
+        Account::parse(
+            $pairs
+                .next()
+                .ok_or(anyhow::Error::msg("invalid next token, expected account"))?,
+        )?
+    };
+}
+
 impl<'s> Statement<'s> {
     fn into_statement(statement: Pair<'s, Rule>) -> anyhow::Result<Self> {
         let tag = statement.as_rule();
@@ -40,26 +50,17 @@ impl<'s> Statement<'s> {
 
         let stmt = match tag {
             Rule::custom_statement => Self::Custom(date, pairs.map(|p| inner_str(p)).collect()),
-            Rule::open_statement => Self::OpenAccount(
-                date,
-                Account::parse(
-                    pairs
-                        .next()
-                        .ok_or(anyhow::Error::msg("invalid next token, expected account"))?,
-                )?,
-            ),
-            Rule::close_statement => {
-                Self::CloseAccount(date, Account::parse(pairs.next().unwrap()).unwrap())
-            }
-            Rule::pad_statement => Self::Pad(
-                date,
-                Account::parse(pairs.next().unwrap()).unwrap(),
-                Account::parse(pairs.next().unwrap()).unwrap(),
-            ),
+            Rule::open_statement => Self::OpenAccount(date, account_parse!(pairs)),
+            Rule::close_statement => Self::CloseAccount(date, account_parse!(pairs)),
+            Rule::pad_statement => Self::Pad(date, account_parse!(pairs), account_parse!(pairs)),
             Rule::balance_statement => Self::Balance(
                 date,
-                Account::parse(pairs.next().unwrap()).unwrap(),
-                Amount::parse(pairs.next().unwrap()).unwrap(),
+                account_parse!(pairs),
+                Amount::parse(
+                    pairs
+                        .next()
+                        .ok_or(anyhow::Error::msg("invalid next token, expected amount"))?,
+                )?,
             ),
             Rule::transaction => Self::Transaction(
                 date,

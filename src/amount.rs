@@ -10,7 +10,7 @@ pub struct Price<'s> {
 }
 
 impl<'p> Price<'p> {
-    pub fn parse(token: Pair<'p, Rule>) -> Result<Price<'p>, &'static str> {
+    pub fn parse(token: Pair<'p, Rule>) -> anyhow::Result<Price<'p>> {
         let mut amount = token.into_inner();
         Ok(Price {
             nominal: amount.next().unwrap().as_str().parse::<f64>().unwrap(),
@@ -27,20 +27,35 @@ pub struct Amount<'s> {
 }
 
 impl<'a> Amount<'a> {
-    pub fn parse(token: Pair<'a, Rule>) -> Result<Amount<'a>, &'static str> {
+    pub fn parse(token: Pair<'a, Rule>) -> anyhow::Result<Amount<'a>> {
         match token.as_rule() {
             Rule::amount_with_price => {
                 let mut pairs = token.into_inner();
-                let mut amount = Self::parse(pairs.next().unwrap()).unwrap();
-                let price = Price::parse(pairs.next().unwrap()).unwrap();
+                let mut amount = Self::parse(
+                    pairs
+                        .next()
+                        .ok_or(anyhow::Error::msg("invalid next token, expected amount"))?,
+                )?;
+                let price = Price::parse(
+                    pairs
+                        .next()
+                        .ok_or(anyhow::Error::msg("invalid next token, expected price"))?,
+                )?;
                 amount.price = Some(price);
                 Ok(amount)
             }
             Rule::amount => {
                 let mut amount = token.into_inner();
                 Ok(Amount {
-                    nominal: amount.next().unwrap().as_str().parse::<f64>().unwrap(),
-                    currency: amount.next().unwrap().as_str(),
+                    nominal: amount
+                        .next()
+                        .ok_or(anyhow::Error::msg("invalid next token, expected nominal"))?
+                        .as_str()
+                        .parse::<f64>()?,
+                    currency: amount
+                        .next()
+                        .ok_or(anyhow::Error::msg("invalid next token, expected currency"))?
+                        .as_str(),
                     price: None,
                 })
             }
