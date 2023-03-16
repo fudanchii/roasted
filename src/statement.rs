@@ -28,15 +28,16 @@ impl<'s> TryFrom<Pair<'s, Rule>> for Statement<'s> {
     }
 }
 
-macro_rules! account_parse {
-    ($pairs:ident) => {
-        Account::parse(
-            $pairs
-                .next()
-                .ok_or(anyhow::Error::msg("invalid next token, expected account"))?,
-        )?
+macro_rules! parse_next {
+    ($parser:ident, $pairs:ident) => {
+        $parser::parse($pairs.next().ok_or(anyhow::Error::msg(format!(
+            "invalid next token, expected {}",
+            stringify!($parser)
+        )))?)?
     };
 }
+
+pub(crate) use parse_next;
 
 impl<'s> Statement<'s> {
     fn into_statement(statement: Pair<'s, Rule>) -> anyhow::Result<Self> {
@@ -50,22 +51,22 @@ impl<'s> Statement<'s> {
 
         let stmt = match tag {
             Rule::custom_statement => Self::Custom(date, pairs.map(|p| inner_str(p)).collect()),
-            Rule::open_statement => Self::OpenAccount(date, account_parse!(pairs)),
-            Rule::close_statement => Self::CloseAccount(date, account_parse!(pairs)),
-            Rule::pad_statement => Self::Pad(date, account_parse!(pairs), account_parse!(pairs)),
+            Rule::open_statement => Self::OpenAccount(date, parse_next!(Account, pairs)),
+            Rule::close_statement => Self::CloseAccount(date, parse_next!(Account, pairs)),
+            Rule::pad_statement => Self::Pad(
+                date,
+                parse_next!(Account, pairs),
+                parse_next!(Account, pairs),
+            ),
             Rule::balance_statement => Self::Balance(
                 date,
-                account_parse!(pairs),
-                Amount::parse(
-                    pairs
-                        .next()
-                        .ok_or(anyhow::Error::msg("invalid next token, expected amount"))?,
-                )?,
+                parse_next!(Account, pairs),
+                parse_next!(Amount, pairs),
             ),
             Rule::transaction => Self::Transaction(
                 date,
-                TxnHeader::parse(pairs.next().unwrap()).unwrap(),
-                TxnList::parse(pairs.next().unwrap()).unwrap(),
+                parse_next!(TxnHeader, pairs),
+                parse_next!(TxnList, pairs),
             ),
             _ => unreachable!(),
         };
@@ -88,8 +89,8 @@ mod tests {
 
     #[test]
     fn parse_custom_statement() -> anyhow::Result<()> {
-        let mut ast = LedgerParser::parse(Rule::statement, r#"2021-01-01 custom "author" "udhin""#)
-            .unwrap_or_else(|e| panic!("{}", e));
+        let mut ast =
+            LedgerParser::parse(Rule::statement, r#"2021-01-01 custom "author" "udhin""#)?;
         let statement = Statement::try_from(ast.next().unwrap())?;
         assert_eq!(
             statement,
@@ -100,8 +101,7 @@ mod tests {
 
     #[test]
     fn parse_open_statement() -> anyhow::Result<()> {
-        let mut ast = LedgerParser::parse(Rule::statement, "2021-02-02 open Assets:Bank:Jago")
-            .unwrap_or_else(|e| panic!("{}", e));
+        let mut ast = LedgerParser::parse(Rule::statement, "2021-02-02 open Assets:Bank:Jago")?;
         let statement = Statement::try_from(ast.next().unwrap())?;
         assert_eq!(
             statement,
@@ -118,8 +118,7 @@ mod tests {
         let mut ast = LedgerParser::parse(
             Rule::statement,
             "2021-12-31 close Liabilities:CrediCard:VISA",
-        )
-        .unwrap_or_else(|e| panic!("{}", e));
+        )?;
         let statement = Statement::try_from(ast.next().unwrap())?;
         assert_eq!(
             statement,
@@ -136,8 +135,7 @@ mod tests {
         let mut ast = LedgerParser::parse(
             Rule::statement,
             "2021-11-10 pad Assets:Cash:OnHand Expenses:Wasted",
-        )
-        .unwrap_or_else(|e| panic!("{}", e));
+        )?;
         let statement = Statement::try_from(ast.next().unwrap())?;
         assert_eq!(
             statement,
@@ -155,8 +153,7 @@ mod tests {
         let mut ast = LedgerParser::parse(
             Rule::statement,
             "2021-02-28 balance\tAssets:Cash:OnHand \t 65750.55\tUSD",
-        )
-        .unwrap_or_else(|e| panic!("{}", e));
+        )?;
         let statement = Statement::try_from(ast.next().unwrap())?;
         assert_eq!(
             statement,
@@ -181,8 +178,7 @@ mod tests {
                  Assets:Cash
                  Expenses:Dining              50 USD
             "#,
-        )
-        .unwrap_or_else(|e| panic!("{}", e));
+        )?;
         let statement = Statement::try_from(ast.next().unwrap())?;
         assert_eq!(
             statement,

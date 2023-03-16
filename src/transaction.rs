@@ -2,6 +2,7 @@ use crate::parser::{inner_str, Rule};
 use crate::{
     account::{Account, TxnAccount},
     amount::{Amount, TxnAmount},
+    statement,
 };
 use pest::iterators::Pair;
 
@@ -13,23 +14,40 @@ pub struct TxnHeader<'th> {
 }
 
 impl<'th> TxnHeader<'th> {
-    pub fn parse(token: Pair<'th, Rule>) -> Result<TxnHeader<'th>, &'static str> {
+    pub fn parse(token: Pair<'th, Rule>) -> anyhow::Result<TxnHeader<'th>> {
         let mut token = token.into_inner();
 
+        let state = token.next().ok_or(anyhow::Error::msg(
+            "invalid next token, transaction state expected",
+        ))?;
+
         // parse txn state
-        let state = match token.next().unwrap().as_str() {
+        let state = match state.as_str() {
             "*" => TransactionState::Settled,
             "!" => TransactionState::Unsettled,
             "#" => TransactionState::Recurring,
-            _ => return Err("invalid transaction state"),
+            _ => return Err(anyhow::Error::msg("invalid transaction state")),
         };
 
         // parse title, if next token exist, parse as payee first, then title
-        let mut title = inner_str(token.next().unwrap().into_inner().next().unwrap());
+        let mut title = inner_str(
+            token
+                .next()
+                .ok_or(anyhow::Error::msg(
+                    "invalid next token, expected start of payee/title",
+                ))?
+                .into_inner()
+                .next()
+                .ok_or(anyhow::Error::msg(
+                    "invalid next token, expected payee/title inner str",
+                ))?,
+        );
         let mut payee = None;
         if let Some(actual_title) = token.next() {
             payee = Some(title);
-            title = inner_str(actual_title.into_inner().next().unwrap());
+            title = inner_str(actual_title.into_inner().next().ok_or(anyhow::Error::msg(
+                "invalid next token, expected title inner str",
+            ))?);
         }
 
         Ok(TxnHeader {
@@ -47,7 +65,7 @@ pub struct TxnList<'tl> {
 }
 
 impl<'tl> TxnList<'tl> {
-    pub fn parse(token: Pair<'tl, Rule>) -> Result<TxnList<'tl>, &'static str> {
+    pub fn parse(token: Pair<'tl, Rule>) -> anyhow::Result<TxnList<'tl>> {
         let pairs = token.into_inner();
         let mut txnlist = TxnList {
             accounts: Vec::new(),
@@ -57,7 +75,7 @@ impl<'tl> TxnList<'tl> {
             let mut tpairs = pair.into_inner();
             txnlist
                 .accounts
-                .push(Account::parse(tpairs.next().unwrap()).unwrap());
+                .push(statement::parse_next!(Account, tpairs));
             let exchg = tpairs
                 .next()
                 .map(|amount_token| Amount::parse(amount_token).unwrap());
