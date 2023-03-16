@@ -29,7 +29,7 @@ pub fn parse(input: &str, carried_ledger: Option<Ledger>) -> anyhow::Result<Ledg
     for statement in statements {
         match statement.as_rule() {
             Rule::option => ledger.parse_option(statement).map_err(anyhow::Error::msg)?,
-            Rule::statement => ledger.process_statement(statement.into()),
+            Rule::statement => ledger.process_statement(statement.try_into()?),
             _ => unreachable!(),
         }
     }

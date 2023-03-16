@@ -5,6 +5,8 @@ use crate::transaction::{TxnHeader, TxnList};
 use chrono::NaiveDate;
 use pest::iterators::Pair;
 
+use std::convert::TryFrom;
+
 #[derive(Debug, PartialEq)]
 pub enum Statement<'s> {
     Custom(NaiveDate, Vec<&'s str>),
@@ -15,25 +17,37 @@ pub enum Statement<'s> {
     Transaction(NaiveDate, TxnHeader<'s>, TxnList<'s>),
 }
 
-impl<'s> From<Pair<'s, Rule>> for Statement<'s> {
-    fn from(pair: Pair<'s, Rule>) -> Self {
-        let inner = pair.into_inner().next().unwrap();
+impl<'s> TryFrom<Pair<'s, Rule>> for Statement<'s> {
+    type Error = anyhow::Error;
+
+    fn try_from(pair: Pair<'s, Rule>) -> Result<Self, Self::Error> {
+        let inner = pair.into_inner().next().ok_or(anyhow::Error::msg(
+            "invalid next token, expected statements",
+        ))?;
         Self::into_statement(inner)
     }
 }
 
 impl<'s> Statement<'s> {
-    fn into_statement(statement: Pair<'s, Rule>) -> Self {
+    fn into_statement(statement: Pair<'s, Rule>) -> anyhow::Result<Self> {
         let tag = statement.as_rule();
         let mut pairs = statement.into_inner();
-        let datestr = pairs.next().unwrap().as_str();
-        let date = NaiveDate::parse_from_str(datestr, "%Y-%m-%d").unwrap();
+        let datestr = pairs
+            .next()
+            .ok_or(anyhow::Error::msg("invalid next token, expected date str"))?
+            .as_str();
+        let date = NaiveDate::parse_from_str(datestr, "%Y-%m-%d")?;
 
-        match tag {
+        let stmt = match tag {
             Rule::custom_statement => Self::Custom(date, pairs.map(|p| inner_str(p)).collect()),
-            Rule::open_statement => {
-                Self::OpenAccount(date, Account::parse(pairs.next().unwrap()).unwrap())
-            }
+            Rule::open_statement => Self::OpenAccount(
+                date,
+                Account::parse(
+                    pairs
+                        .next()
+                        .ok_or(anyhow::Error::msg("invalid next token, expected account"))?,
+                )?,
+            ),
             Rule::close_statement => {
                 Self::CloseAccount(date, Account::parse(pairs.next().unwrap()).unwrap())
             }
@@ -53,7 +67,9 @@ impl<'s> Statement<'s> {
                 TxnList::parse(pairs.next().unwrap()).unwrap(),
             ),
             _ => unreachable!(),
-        }
+        };
+
+        Ok(stmt)
     }
 }
 
@@ -67,22 +83,25 @@ mod tests {
     use chrono::NaiveDate;
     use pest::Parser;
 
+    use std::convert::TryFrom;
+
     #[test]
-    fn parse_custom_statement() {
+    fn parse_custom_statement() -> anyhow::Result<()> {
         let mut ast = LedgerParser::parse(Rule::statement, r#"2021-01-01 custom "author" "udhin""#)
             .unwrap_or_else(|e| panic!("{}", e));
-        let statement = Statement::from(ast.next().unwrap());
+        let statement = Statement::try_from(ast.next().unwrap())?;
         assert_eq!(
             statement,
             Statement::Custom(NaiveDate::from_ymd(2021, 1, 1), vec!["author", "udhin"])
         );
+        Ok(())
     }
 
     #[test]
-    fn parse_open_statement() {
+    fn parse_open_statement() -> anyhow::Result<()> {
         let mut ast = LedgerParser::parse(Rule::statement, "2021-02-02 open Assets:Bank:Jago")
             .unwrap_or_else(|e| panic!("{}", e));
-        let statement = Statement::from(ast.next().unwrap());
+        let statement = Statement::try_from(ast.next().unwrap())?;
         assert_eq!(
             statement,
             Statement::OpenAccount(
@@ -90,16 +109,17 @@ mod tests {
                 Account::Assets(vec!["Bank", "Jago"])
             )
         );
+        Ok(())
     }
 
     #[test]
-    fn parse_close_statement() {
+    fn parse_close_statement() -> anyhow::Result<()> {
         let mut ast = LedgerParser::parse(
             Rule::statement,
             "2021-12-31 close Liabilities:CrediCard:VISA",
         )
         .unwrap_or_else(|e| panic!("{}", e));
-        let statement = Statement::from(ast.next().unwrap());
+        let statement = Statement::try_from(ast.next().unwrap())?;
         assert_eq!(
             statement,
             Statement::CloseAccount(
@@ -107,16 +127,17 @@ mod tests {
                 Account::Liabilities(vec!["CrediCard", "VISA"]),
             )
         );
+        Ok(())
     }
 
     #[test]
-    fn parse_pad_statement() {
+    fn parse_pad_statement() -> anyhow::Result<()> {
         let mut ast = LedgerParser::parse(
             Rule::statement,
             "2021-11-10 pad Assets:Cash:OnHand Expenses:Wasted",
         )
         .unwrap_or_else(|e| panic!("{}", e));
-        let statement = Statement::from(ast.next().unwrap());
+        let statement = Statement::try_from(ast.next().unwrap())?;
         assert_eq!(
             statement,
             Statement::Pad(
@@ -125,16 +146,17 @@ mod tests {
                 Account::Expenses(vec!["Wasted"]),
             )
         );
+        Ok(())
     }
 
     #[test]
-    fn parse_balance_statement() {
+    fn parse_balance_statement() -> anyhow::Result<()> {
         let mut ast = LedgerParser::parse(
             Rule::statement,
             "2021-02-28 balance\tAssets:Cash:OnHand \t 65750.55\tUSD",
         )
         .unwrap_or_else(|e| panic!("{}", e));
-        let statement = Statement::from(ast.next().unwrap());
+        let statement = Statement::try_from(ast.next().unwrap())?;
         assert_eq!(
             statement,
             Statement::Balance(
@@ -147,10 +169,11 @@ mod tests {
                 }
             )
         );
+        Ok(())
     }
 
     #[test]
-    fn parse_transaction_statement() {
+    fn parse_transaction_statement() -> anyhow::Result<()> {
         let mut ast = LedgerParser::parse(
             Rule::statement,
             r#"2021-04-01 * "Gubuk mang Engking" "Splurge @ diner"
@@ -159,7 +182,7 @@ mod tests {
             "#,
         )
         .unwrap_or_else(|e| panic!("{}", e));
-        let statement = Statement::from(ast.next().unwrap());
+        let statement = Statement::try_from(ast.next().unwrap())?;
         assert_eq!(
             statement,
             Statement::Transaction(
@@ -185,5 +208,6 @@ mod tests {
                 }
             )
         );
+        Ok(())
     }
 }

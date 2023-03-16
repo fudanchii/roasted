@@ -22,7 +22,7 @@ impl<'a> Account<'a> {
         s.split(':').skip(1).collect()
     }
 
-    pub fn parse(token: Pair<'a, Rule>) -> Result<Account<'a>, &'static str> {
+    pub fn parse(token: Pair<'a, Rule>) -> anyhow::Result<Account<'a>> {
         token.as_str().try_into()
     }
 }
@@ -40,7 +40,7 @@ impl<'a> fmt::Display for Account<'a> {
 }
 
 impl<'a> TryFrom<&'a str> for Account<'a> {
-    type Error = &'static str;
+    type Error = anyhow::Error;
 
     fn try_from(s: &'a str) -> Result<Self, Self::Error> {
         if s.starts_with("Assets:") {
@@ -63,7 +63,10 @@ impl<'a> TryFrom<&'a str> for Account<'a> {
             return Ok(Account::Equity(Account::base_name(s)));
         }
 
-        Err("input is not a valid Account")
+        Err(anyhow::Error::msg(format!(
+            "input `{}' is not a valid token for Account",
+            s
+        )))
     }
 }
 

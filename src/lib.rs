@@ -23,7 +23,10 @@ pub mod account;
 mod amount;
 /// Ledger representation.
 pub mod ledger;
-mod parser;
+
+/// Our main parser entrypoints.
+pub mod parser;
+
 mod statement;
 mod transaction;
 
@@ -46,4 +49,8 @@ impl LedgerError<()> {
     pub fn with_context<U: std::fmt::Debug>(self, ctx: U) -> LedgerError<U> {
         LedgerError(self.0, ctx)
     }
+}
+
+pub fn err<T: std::fmt::Debug>(ty: T) -> LedgerError<T> {
+    LedgerError("parse error", ty)
 }
