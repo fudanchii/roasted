@@ -82,3 +82,14 @@ pub struct Transaction {
     pub accounts: Vec<TxnAccount>,
     pub exchanges: Vec<Option<TxnAmount>>,
 }
+
+pub struct BalanceAssertion {
+    account: TxnAccount,
+    amount: TxnAmount,
+}
+
+pub struct PadTransaction {
+    left_account: TxnAccount,
+    right_account: TxnAccount,
+    position: Option<f64>,
+}

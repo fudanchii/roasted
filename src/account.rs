@@ -59,7 +59,7 @@ impl<'a> TryFrom<&'a str> for Account<'a> {
             return Ok(Account::Income(Account::base_name(s)));
         }
 
-        if s.starts_with("Equity") {
+        if s.starts_with("Equity:") {
             return Ok(Account::Equity(Account::base_name(s)));
         }
 

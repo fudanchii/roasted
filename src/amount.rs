@@ -1,6 +1,8 @@
 use crate::parser::Rule;
 use pest::iterators::Pair;
 
+use std::sync::Mutex;
+
 #[derive(Debug, PartialEq)]
 pub struct Price<'s> {
     pub(crate) nominal: f64,
@@ -66,6 +68,50 @@ pub struct TxnAmount {
     pub nominal: f64,
     pub currency: usize,
     pub price: Option<TxnPrice>,
+}
+
+#[derive(Default)]
+pub struct CurrencyStore(Mutex<Vec<String>>);
+
+impl CurrencyStore {
+    pub fn new() -> Self {
+        Self(Mutex::new(Vec::new()))
+    }
+
+    pub fn lookup(&self, currency: &str) -> Option<usize> {
+        let store = self.0.lock().unwrap();
+        store.iter().position(|s| currency == s)
+    }
+
+    pub fn txnify(&self, currency: &str) -> usize {
+        if let Some(idx) = self.lookup(currency) {
+            return idx;
+        }
+
+        let mut data = self.0.lock().unwrap();
+        data.push(currency.to_string());
+        data.len() - 1
+    }
+
+    pub fn price_txnify(&self, price: &Option<Price>) -> Option<TxnPrice> {
+        price.as_ref().map(|p| TxnPrice {
+            nominal: p.nominal,
+            currency: self.txnify(p.currency),
+        })
+    }
+
+    pub fn amount_txnify(&self, amount: &Amount) -> TxnAmount {
+        TxnAmount {
+            nominal: amount.nominal,
+            currency: self.txnify(amount.currency),
+            price: self.price_txnify(&amount.price),
+        }
+    }
+
+    pub fn currencyify(&self, idx: usize) -> Option<String> {
+        let data = self.0.lock().unwrap();
+        data.get(idx).map(|s| s.clone())
+    }
 }
 
 #[cfg(test)]

@@ -1,28 +1,16 @@
 use crate::{
     account::{AccountStore, TxnAccount},
-    amount::{Amount, Price, TxnAmount, TxnPrice},
+    amount::{CurrencyStore, TxnAmount},
     parser::inner_str,
     statement::Statement,
-    transaction::{Transaction, TxnHeader, TxnList},
+    transaction::{BalanceAssertion, PadTransaction, Transaction, TxnHeader, TxnList},
 };
 use chrono::naive::NaiveDate;
 use std::collections::{BTreeMap, HashMap};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use crate::parser::Rule;
 use pest::iterators::Pair;
-
-pub struct BalanceAssertion {
-    account: TxnAccount,
-    position: f64,
-    currency: usize,
-}
-
-pub struct PadTransaction {
-    left_account: TxnAccount,
-    right_account: TxnAccount,
-    position: Option<f64>,
-}
 
 #[derive(Default)]
 pub struct DayBook {
@@ -44,50 +32,6 @@ impl DayBook {
 
     pub fn get_custom(&self) -> &Vec<Vec<String>> {
         &self.custom
-    }
-}
-
-#[derive(Default)]
-pub struct CurrencyStore(Mutex<Vec<String>>);
-
-impl CurrencyStore {
-    pub fn new() -> Self {
-        Self(Mutex::new(Vec::new()))
-    }
-
-    pub fn lookup(&self, currency: &str) -> Option<usize> {
-        let store = self.0.lock().unwrap();
-        store.iter().position(|s| currency == s)
-    }
-
-    pub fn txnify(&self, currency: &str) -> usize {
-        if let Some(idx) = self.lookup(currency) {
-            return idx;
-        }
-
-        let mut data = self.0.lock().unwrap();
-        data.push(currency.to_string());
-        data.len() - 1
-    }
-
-    pub fn price_txnify(&self, price: &Option<Price>) -> Option<TxnPrice> {
-        price.as_ref().map(|p| TxnPrice {
-            nominal: p.nominal,
-            currency: self.txnify(p.currency),
-        })
-    }
-
-    pub fn amount_txnify(&self, amount: &Amount) -> TxnAmount {
-        TxnAmount {
-            nominal: amount.nominal,
-            currency: self.txnify(amount.currency),
-            price: self.price_txnify(&amount.price),
-        }
-    }
-
-    pub fn currencyify(&self, idx: usize) -> Option<String> {
-        let data = self.0.lock().unwrap();
-        data.get(idx).map(|s| s.clone())
     }
 }
 
