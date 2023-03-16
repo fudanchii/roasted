@@ -2,10 +2,26 @@ use crate::parser::Rule;
 use pest::iterators::Pair;
 
 #[derive(Debug, PartialEq)]
+pub struct Price<'s> {
+    pub(crate) nominal: f64,
+    pub(crate) currency: &'s str,
+}
+
+impl<'p> Price<'p> {
+    pub fn parse(token: Pair<'p, Rule>) -> Result<Price<'p>, &'static str> {
+        let mut amount = token.into_inner();
+        Ok(Price {
+            nominal: amount.next().unwrap().as_str().parse::<f64>().unwrap(),
+            currency: amount.next().unwrap().as_str(),
+        })
+    }
+}
+
+#[derive(Debug, PartialEq)]
 pub struct Amount<'s> {
     pub(crate) nominal: f64,
     pub(crate) currency: &'s str,
-    pub(crate) price: Option<Box<Amount<'s>>>,
+    pub(crate) price: Option<Price<'s>>,
 }
 
 impl<'a> Amount<'a> {
@@ -14,8 +30,8 @@ impl<'a> Amount<'a> {
             Rule::amount_with_price => {
                 let mut pairs = token.into_inner();
                 let mut amount = Self::parse(pairs.next().unwrap()).unwrap();
-                let price = Self::parse(pairs.next().unwrap()).unwrap();
-                amount.price = Some(Box::new(price));
+                let price = Price::parse(pairs.next().unwrap()).unwrap();
+                amount.price = Some(price);
                 Ok(amount)
             }
             Rule::amount => {
@@ -40,15 +56,21 @@ impl<'a> Amount<'a> {
 }
 
 #[derive(Debug, PartialEq)]
+pub struct TxnPrice {
+    pub nominal: f64,
+    pub currency: usize,
+}
+
+#[derive(Debug, PartialEq)]
 pub struct TxnAmount {
-    nominal: f64,
-    currency: usize,
-    price: Option<Box<TxnAmount>>,
+    pub nominal: f64,
+    pub currency: usize,
+    pub price: Option<TxnPrice>,
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::amount::Amount;
+    use crate::amount::{Amount, Price};
     use crate::parser::{LedgerParser, Rule};
     use pest::Parser;
 
@@ -63,11 +85,10 @@ mod tests {
             Amount {
                 nominal: 1337f64,
                 currency: "USD",
-                price: Some(Box::new(Amount {
+                price: Some(Price {
                     nominal: 1000f64,
                     currency: "IDR",
-                    price: None,
-                }))
+                })
             }
         );
     }

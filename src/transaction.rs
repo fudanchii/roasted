@@ -1,9 +1,8 @@
 use crate::parser::{inner_str, Rule};
 use crate::{
-    account::{Account, AccountStore, TxnAccount},
+    account::{Account, TxnAccount},
     amount::{Amount, TxnAmount},
 };
-use chrono::NaiveDate;
 use pest::iterators::Pair;
 
 #[derive(Debug, PartialEq)]
@@ -68,7 +67,7 @@ impl<'tl> TxnList<'tl> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TransactionState {
     Settled,   // '*'
     Unsettled, // '!'
@@ -77,11 +76,9 @@ pub enum TransactionState {
 }
 
 pub struct Transaction {
-    state: TransactionState,
-    payee: Option<String>,
-    title: String,
-    accounts: Vec<TxnAccount>,
-    exchanges: Vec<TxnAmount>,
+    pub state: TransactionState,
+    pub payee: Option<String>,
+    pub title: String,
+    pub accounts: Vec<TxnAccount>,
+    pub exchanges: Vec<Option<TxnAmount>>,
 }
-
-impl Transaction {}

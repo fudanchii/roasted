@@ -1,11 +1,13 @@
 use crate::{
     account::{AccountStore, TxnAccount},
+    amount::{Amount, Price, TxnAmount, TxnPrice},
     parser::inner_str,
     statement::Statement,
     transaction::{Transaction, TxnHeader, TxnList},
 };
 use chrono::naive::NaiveDate;
 use std::collections::{BTreeMap, HashMap};
+use std::sync::{Arc, Mutex};
 
 use crate::parser::Rule;
 use pest::iterators::Pair;
@@ -46,11 +48,55 @@ impl DayBook {
 }
 
 #[derive(Default)]
+pub struct CurrencyStore(Mutex<Vec<String>>);
+
+impl CurrencyStore {
+    pub fn new() -> Self {
+        Self(Mutex::new(Vec::new()))
+    }
+
+    pub fn lookup(&self, currency: &str) -> Option<usize> {
+        let store = self.0.lock().unwrap();
+        store.iter().position(|s| currency == s)
+    }
+
+    pub fn txnify(&self, currency: &str) -> usize {
+        if let Some(idx) = self.lookup(currency) {
+            return idx;
+        }
+
+        let mut data = self.0.lock().unwrap();
+        data.push(currency.to_string());
+        data.len() - 1
+    }
+
+    pub fn price_txnify(&self, price: &Option<Price>) -> Option<TxnPrice> {
+        price.as_ref().map(|p| TxnPrice {
+            nominal: p.nominal,
+            currency: self.txnify(p.currency),
+        })
+    }
+
+    pub fn amount_txnify(&self, amount: &Amount) -> TxnAmount {
+        TxnAmount {
+            nominal: amount.nominal,
+            currency: self.txnify(amount.currency),
+            price: self.price_txnify(&amount.price),
+        }
+    }
+
+    pub fn currencyify(&self, idx: usize) -> Option<String> {
+        let data = self.0.lock().unwrap();
+        data.get(idx).map(|s| s.clone())
+    }
+}
+
+#[derive(Default)]
 pub struct Ledger {
     accounts: AccountStore,
     bookings: BTreeMap<NaiveDate, DayBook>,
     options: HashMap<String, String>,
-    currencies: Vec<String>,
+    currencies: Arc<CurrencyStore>,
 }
 
 impl Ledger {
@@ -59,7 +105,7 @@ impl Ledger {
             accounts: AccountStore::new(),
             bookings: BTreeMap::new(),
             options: HashMap::new(),
-            currencies: Vec::new(),
+            currencies: Arc::new(CurrencyStore::new()),
         }
     }
 
@@ -110,12 +156,47 @@ impl Ledger {
         self.bookings.insert(date, book);
     }
 
+    fn new_transaction(
+        &mut self,
+        date: NaiveDate,
+        header: &TxnHeader<'_>,
+        txn: &TxnList<'_>,
+    ) -> Result<Transaction, &'static str> {
+        let mut accounts: Vec<TxnAccount> = Vec::new();
+        let mut exchanges: Vec<Option<TxnAmount>> = Vec::new();
+
+        for account in &txn.accounts {
+            accounts.push(self.accounts.txnify(&account, date)?);
+        }
+
+        for amount in &txn.exchanges {
+            exchanges.push(amount.as_ref().map(|a| self.currencies.amount_txnify(a)));
+        }
+
+        Ok(Transaction {
+            state: header.state,
+            payee: header.payee.map(|c| c.to_string()),
+            title: header.title.to_string(),
+            accounts: accounts,
+            exchanges: exchanges,
+        })
+    }
+
     fn process_transaction_statement(
         &mut self,
         date: NaiveDate,
         header: TxnHeader<'_>,
         txn: TxnList<'_>,
     ) {
+        let transaction = self.new_transaction(date, &header, &txn).unwrap();
+        if let Some(book) = self.get_mut_at(&date) {
+            book.transactions.push(transaction);
+            return;
+        }
+
+        let mut book = DayBook::new();
+        book.transactions.push(transaction);
+        self.bookings.insert(date, book);
     }
 }
 
