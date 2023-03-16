@@ -124,7 +124,7 @@ impl AccountStore {
         Some(idxs)
     }
 
-    pub fn open<'a>(&mut self, acc: &Account<'a>, at: NaiveDate) -> Result<(), &'static str> {
+    pub fn open<'a>(&mut self, acc: &Account<'a>, at: NaiveDate) -> anyhow::Result<()> {
         match acc {
             Account::Assets(val) => {
                 let idxs = self.index_segments(val);
@@ -185,14 +185,14 @@ impl AccountStore {
         account_set: &mut BTreeMap<Vec<usize>, AccountActivities>,
         idxs: &Vec<usize>,
         at: NaiveDate,
-    ) -> Result<(), &'static str> {
+    ) -> anyhow::Result<()> {
         account_set
             .get_mut(idxs)
             .map(|activity| activity.closed_at = Some(at))
-            .ok_or("valid account with no activities")
+            .ok_or(anyhow::Error::msg("valid account with no activities"))
     }
 
-    pub fn close<'a>(&mut self, acc: &Account<'a>, at: NaiveDate) -> Result<(), &'static str> {
+    pub fn close<'a>(&mut self, acc: &Account<'a>, at: NaiveDate) -> anyhow::Result<()> {
         let txn_acc = self.txnify(acc, at)?;
         match txn_acc {
             TxnAccount::Assets(idxs) => Self::close_account(&mut self.assets, &idxs, at)?,
@@ -230,11 +230,7 @@ impl AccountStore {
         None
     }
 
-    pub fn txnify<'a>(
-        &self,
-        acc: &Account<'a>,
-        date: NaiveDate,
-    ) -> Result<TxnAccount, &'static str> {
+    pub fn txnify<'a>(&self, acc: &Account<'a>, date: NaiveDate) -> anyhow::Result<TxnAccount> {
         let txn_account = match acc {
             Account::Assets(val) => self.lookup_index(val).map(|idxs| TxnAccount::Assets(idxs)),
             Account::Expenses(val) => self
@@ -249,19 +245,22 @@ impl AccountStore {
 
         txn_account
             .and_then(|txnacct| self.txn_account_valid_at(date, txnacct))
-            .ok_or("unopened account")
+            .ok_or(anyhow::Error::msg("unopened account"))
     }
 
-    fn lookup_segments<'a>(&'a self, v: &Vec<usize>) -> Result<Vec<&'a str>, &'static str> {
+    fn lookup_segments<'a>(&'a self, v: &Vec<usize>) -> anyhow::Result<Vec<&'a str>> {
         let mut segments = Vec::new();
         for &idx in v {
-            let segment = self.segments.get(idx).ok_or("undefined account")?;
+            let segment = self
+                .segments
+                .get(idx)
+                .ok_or(anyhow::Error::msg("undefined account"))?;
             segments.push(segment.as_str());
         }
         Ok(segments)
     }
 
-    pub fn accountify(&self, actxn: &TxnAccount) -> Result<Account, &'static str> {
+    pub fn accountify(&self, actxn: &TxnAccount) -> anyhow::Result<Account> {
         match actxn {
             TxnAccount::Assets(idxs) => Ok(Account::Assets(self.lookup_segments(idxs)?)),
             TxnAccount::Expenses(idxs) => Ok(Account::Expenses(self.lookup_segments(idxs)?)),
@@ -278,7 +277,7 @@ mod tests {
     use chrono::NaiveDate;
 
     #[test]
-    fn test_open_account() -> Result<(), &'static str> {
+    fn test_open_account() -> anyhow::Result<()> {
         let mut store = AccountStore::new();
         let date1 = NaiveDate::from_ymd(2021, 10, 25);
         let date2 = NaiveDate::from_ymd(2021, 10, 28);
@@ -287,14 +286,17 @@ mod tests {
         store.open(&account1, date1)?;
         store.open(&account2, date2)?;
         assert_eq!(
-            store.txnify(&account1, date1),
-            Ok(TxnAccount::Assets(vec![0, 1]))
+            store.txnify(&account1, date1)?,
+            TxnAccount::Assets(vec![0, 1])
         );
         assert_eq!(
-            store.txnify(&account2, date2),
-            Ok(TxnAccount::Expenses(vec![2]))
+            store.txnify(&account2, date2)?,
+            TxnAccount::Expenses(vec![2])
         );
-        assert_eq!(store.txnify(&account2, date1), Err("unopened account"));
+        assert_eq!(
+            format!("{}", store.txnify(&account2, date1).unwrap_err()),
+            "unopened account"
+        );
         assert_eq!(
             format!(
                 "{}",

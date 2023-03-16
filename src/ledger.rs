@@ -53,10 +53,14 @@ impl Ledger {
         }
     }
 
-    pub fn parse_option(&mut self, token: Pair<Rule>) -> Result<(), &'static str> {
+    pub fn parse_option(&mut self, token: Pair<Rule>) -> anyhow::Result<()> {
         let mut option = token.into_inner();
-        let key = inner_str(option.next().ok_or("invalid token")?);
-        let val = inner_str(option.next().ok_or("invalid token")?);
+        let key = inner_str(option.next().ok_or(anyhow::Error::msg(
+            "invalid next token, expected option's key",
+        ))?);
+        let val = inner_str(option.next().ok_or(anyhow::Error::msg(
+            "invalid next token, expected option's value",
+        ))?);
         self.set_option(key, val);
         Ok(())
     }
@@ -105,7 +109,7 @@ impl Ledger {
         date: NaiveDate,
         header: &TxnHeader<'_>,
         txn: &TxnList<'_>,
-    ) -> Result<Transaction, &'static str> {
+    ) -> anyhow::Result<Transaction> {
         let mut accounts: Vec<TxnAccount> = Vec::new();
         let mut exchanges: Vec<Option<TxnAmount>> = Vec::new();
 
