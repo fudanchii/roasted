@@ -28,11 +28,12 @@ pub fn parse(input: &str, carried_ledger: Option<Ledger>) -> anyhow::Result<Ledg
 
     for statement in statements {
         match statement.as_rule() {
-            Rule::option => ledger.parse_option(statement).map_err(anyhow::Error::msg)?,
-            Rule::statement => ledger.process_statement(statement.try_into()?),
+            Rule::option => ledger.parse_option(statement)?,
+            Rule::statement => ledger.process_statement(statement.try_into()?)?,
             _ => unreachable!(),
-        }
+        };
     }
+
     Ok(ledger)
 }
 

@@ -102,12 +102,11 @@ pub struct Transaction {
 }
 
 pub struct BalanceAssertion {
-    account: TxnAccount,
-    amount: TxnAmount,
+    pub account: TxnAccount,
+    pub amount: TxnAmount,
 }
 
 pub struct PadTransaction {
-    left_account: TxnAccount,
-    right_account: TxnAccount,
-    position: Option<f64>,
+    pub target: TxnAccount,
+    pub source: TxnAccount,
 }

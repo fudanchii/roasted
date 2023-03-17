@@ -1,6 +1,6 @@
 use crate::{
-    account::{AccountStore, TxnAccount},
-    amount::{CurrencyStore, TxnAmount},
+    account::{Account, AccountStore, TxnAccount},
+    amount::{Amount, CurrencyStore, TxnAmount},
     parser::inner_str,
     statement::Statement,
     transaction::{BalanceAssertion, PadTransaction, Transaction, TxnHeader, TxnList},
@@ -43,6 +43,20 @@ pub struct Ledger {
     currencies: Arc<CurrencyStore>,
 }
 
+macro_rules! daybook_insert {
+    ($self:ident, $date:ident, $field:ident, $val:expr) => {
+        if let Some(book) = $self.get_mut_at(&$date) {
+            book.$field.push($val);
+            Ok(())
+        } else {
+            let mut book = DayBook::new();
+            book.$field.push($val);
+            $self.bookings.insert($date, book);
+            Ok(())
+        }
+    };
+}
+
 impl Ledger {
     pub fn new() -> Ledger {
         Ledger {
@@ -73,13 +87,14 @@ impl Ledger {
         self.options.get(key)
     }
 
-    pub fn process_statement(&mut self, statement: Statement) {
+    pub fn process_statement(&mut self, statement: Statement) -> anyhow::Result<()> {
         match statement {
-            Statement::Custom(date, args) => self.process_custom_statement(date, args),
-            Statement::Transaction(date, h, txn) => {
-                self.process_transaction_statement(date, h, txn)
-            }
-            _ => unreachable!(),
+            Statement::Custom(date, args) => self.custom(date, args),
+            Statement::OpenAccount(date, account) => self.open_account(date, &account),
+            Statement::CloseAccount(date, account) => self.close_account(date, &account),
+            Statement::Pad(date, target, source) => self.pad(date, &target, &source),
+            Statement::Balance(date, account, amount) => self.balance(date, &account, &amount),
+            Statement::Transaction(date, h, txn) => self.transaction(date, h, txn),
         }
     }
 
@@ -91,17 +106,47 @@ impl Ledger {
         self.bookings.get(date)
     }
 
-    fn process_custom_statement(&mut self, date: NaiveDate, args: Vec<&str>) {
-        if let Some(book) = self.get_mut_at(&date) {
-            book.custom
-                .push(args.iter().map(|s| s.to_string()).collect());
-            return;
-        }
+    fn custom(&mut self, date: NaiveDate, args: Vec<&str>) -> anyhow::Result<()> {
+        daybook_insert!(
+            self,
+            date,
+            custom,
+            args.iter().map(|s| s.to_string()).collect()
+        )
+    }
 
-        let mut book = DayBook::new();
-        book.custom
-            .push(args.iter().map(|s| s.to_string()).collect());
-        self.bookings.insert(date, book);
+    fn open_account(&mut self, date: NaiveDate, account: &Account<'_>) -> anyhow::Result<()> {
+        self.accounts.open(account, date)
+    }
+
+    fn close_account(&mut self, date: NaiveDate, account: &Account<'_>) -> anyhow::Result<()> {
+        self.accounts.close(account, date)
+    }
+
+    fn pad(
+        &mut self,
+        date: NaiveDate,
+        target: &Account<'_>,
+        source: &Account<'_>,
+    ) -> anyhow::Result<()> {
+        let pad_trx = PadTransaction {
+            target: self.accounts.txnify(target, date)?,
+            source: self.accounts.txnify(source, date)?,
+        };
+        daybook_insert!(self, date, pads, pad_trx)
+    }
+
+    fn balance(
+        &mut self,
+        date: NaiveDate,
+        account: &Account<'_>,
+        amount: &Amount<'_>,
+    ) -> anyhow::Result<()> {
+        let balance_assert = BalanceAssertion {
+            account: self.accounts.txnify(account, date)?,
+            amount: self.currencies.amount_txnify(amount),
+        };
+        daybook_insert!(self, date, balance_asserts, balance_assert)
     }
 
     fn new_transaction(
@@ -130,21 +175,14 @@ impl Ledger {
         })
     }
 
-    fn process_transaction_statement(
+    fn transaction(
         &mut self,
         date: NaiveDate,
         header: TxnHeader<'_>,
         txn: TxnList<'_>,
-    ) {
-        let transaction = self.new_transaction(date, &header, &txn).unwrap();
-        if let Some(book) = self.get_mut_at(&date) {
-            book.transactions.push(transaction);
-            return;
-        }
-
-        let mut book = DayBook::new();
-        book.transactions.push(transaction);
-        self.bookings.insert(date, book);
+    ) -> anyhow::Result<()> {
+        let transaction = self.new_transaction(date, &header, &txn)?;
+        daybook_insert!(self, date, transactions, transaction)
     }
 }
 
