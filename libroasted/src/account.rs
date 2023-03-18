@@ -5,9 +5,8 @@ use std::fmt;
 
 use crate::parser::Rule;
 use anyhow::{anyhow, Result};
+use camelpaste::paste;
 use pest::iterators::Pair;
-
-pub mod error {}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Account<'a> {
@@ -122,58 +121,25 @@ impl AccountStore {
         Some(idxs)
     }
 
-    pub fn open(&mut self, acc: &Account<'_>, at: NaiveDate) -> Result<()> {
-        match acc {
-            Account::Assets(val) => {
-                let idxs = self.index_segments(val);
-                self.assets.insert(
-                    idxs,
-                    AccountActivities {
-                        opened_at: at,
-                        closed_at: None,
-                    },
-                );
+    pub fn open(&mut self, acc: &Account<'_>, opened_at: NaiveDate) -> Result<()> {
+        macro_rules! txn {
+            ($($account_type:ident),*) => {
+                match acc {$(
+                    Account::$account_type(val) => paste! {{
+                        let idxs = self.index_segments(val);
+                        self.[<$account_type:lower>]
+                            .insert(idxs, AccountActivities {opened_at, closed_at: None});
+                    }},
+                )*}
             }
-            Account::Expenses(val) => {
-                let idxs = self.index_segments(val);
-                self.expenses.insert(
-                    idxs,
-                    AccountActivities {
-                        opened_at: at,
-                        closed_at: None,
-                    },
-                );
-            }
-            Account::Liabilities(val) => {
-                let idxs = self.index_segments(val);
-                self.liabilities.insert(
-                    idxs,
-                    AccountActivities {
-                        opened_at: at,
-                        closed_at: None,
-                    },
-                );
-            }
-            Account::Income(val) => {
-                let idxs = self.index_segments(val);
-                self.income.insert(
-                    idxs,
-                    AccountActivities {
-                        opened_at: at,
-                        closed_at: None,
-                    },
-                );
-            }
-            Account::Equity(val) => {
-                let idxs = self.index_segments(val);
-                self.equity.insert(
-                    idxs,
-                    AccountActivities {
-                        opened_at: at,
-                        closed_at: None,
-                    },
-                );
-            }
+        }
+
+        txn! {
+            Assets,
+            Expenses,
+            Income,
+            Liabilities,
+            Equity
         }
 
         Ok(())
