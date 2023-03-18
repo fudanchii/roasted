@@ -235,6 +235,60 @@ mod tests {
     use chrono::NaiveDate;
 
     #[test]
+    fn test_print_account() {
+        assert_eq!(
+            format!("{}", Account::Assets(vec!["Bank", "Swiss"])),
+            "Assets:Bank:Swiss"
+        );
+        assert_eq!(
+            format!("{}", Account::Expenses(vec!["Groceries", "Daily"])),
+            "Expenses:Groceries:Daily"
+        );
+        assert_eq!(
+            format!("{}", Account::Liabilities(vec!["Mortgage", "House"])),
+            "Liabilities:Mortgage:House"
+        );
+        assert_eq!(
+            format!("{}", Account::Income(vec!["Salary", "GOOGL"])),
+            "Income:Salary:GOOGL"
+        );
+        assert_eq!(
+            format!("{}", Account::Equity(vec!["Opening-Account"])),
+            "Equity:Opening-Account"
+        );
+    }
+
+    #[test]
+    fn test_convert() -> Result<()> {
+        assert_eq!(
+            Account::Assets(vec!["Checking", "Daily"]),
+            "Assets:Checking:Daily".try_into()?
+        );
+        assert_eq!(
+            Account::Expenses(vec!["Clothing", "Dresses"]),
+            "Expenses:Clothing:Dresses".try_into()?
+        );
+        assert_eq!(
+            Account::Liabilities(vec!["Payable", "BigSis"]),
+            "Liabilities:Payable:BigSis".try_into()?
+        );
+        assert_eq!(
+            Account::Income(vec!["Stores", "Order"]),
+            "Income:Stores:Order".try_into()?
+        );
+        assert_eq!(
+            Account::Equity(vec!["Previous-Balance"]),
+            "Equity:Previous-Balance".try_into()?
+        );
+        let result: Result<Account> = "Outcome:Statement".try_into();
+        assert_eq!(
+            "input `Outcome:Statement' is not a valid token for Account",
+            format!("{}", result.unwrap_err())
+        );
+        Ok(())
+    }
+
+    #[test]
     fn test_open_account() -> Result<()> {
         let mut store = AccountStore::new();
         let date1 = NaiveDate::from_ymd_opt(2021, 10, 25).ok_or(anyhow!("invalid date"))?;
