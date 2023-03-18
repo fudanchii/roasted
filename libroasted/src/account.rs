@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use crate::parser::Rule;
+use anyhow::{anyhow, Result};
 use pest::iterators::Pair;
 
 pub mod error {}
@@ -22,7 +23,7 @@ impl<'a> Account<'a> {
         s.split(':').skip(1).collect()
     }
 
-    pub fn parse(token: Pair<'a, Rule>) -> anyhow::Result<Account<'a>> {
+    pub fn parse(token: Pair<'a, Rule>) -> Result<Account<'a>> {
         token.as_str().try_into()
     }
 }
@@ -42,7 +43,7 @@ impl<'a> fmt::Display for Account<'a> {
 impl<'a> TryFrom<&'a str> for Account<'a> {
     type Error = anyhow::Error;
 
-    fn try_from(s: &'a str) -> Result<Self, Self::Error> {
+    fn try_from(s: &'a str) -> Result<Self> {
         if s.starts_with("Assets:") {
             return Ok(Account::Assets(Account::base_name(s)));
         }
@@ -63,10 +64,7 @@ impl<'a> TryFrom<&'a str> for Account<'a> {
             return Ok(Account::Equity(Account::base_name(s)));
         }
 
-        Err(anyhow::Error::msg(format!(
-            "input `{}' is not a valid token for Account",
-            s
-        )))
+        Err(anyhow!("input `{}' is not a valid token for Account", s))
     }
 }
 
@@ -124,7 +122,7 @@ impl AccountStore {
         Some(idxs)
     }
 
-    pub fn open(&mut self, acc: &Account<'_>, at: NaiveDate) -> anyhow::Result<()> {
+    pub fn open(&mut self, acc: &Account<'_>, at: NaiveDate) -> Result<()> {
         match acc {
             Account::Assets(val) => {
                 let idxs = self.index_segments(val);
@@ -185,14 +183,14 @@ impl AccountStore {
         account_set: &mut BTreeMap<Vec<usize>, AccountActivities>,
         idxs: &Vec<usize>,
         at: NaiveDate,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         account_set
             .get_mut(idxs)
             .map(|activity| activity.closed_at = Some(at))
-            .ok_or(anyhow::Error::msg("valid account with no activities"))
+            .ok_or(anyhow!("valid account with no activities"))
     }
 
-    pub fn close(&mut self, acc: &Account<'_>, at: NaiveDate) -> anyhow::Result<()> {
+    pub fn close(&mut self, acc: &Account<'_>, at: NaiveDate) -> Result<()> {
         let txn_acc = self.txnify(acc, at)?;
         match txn_acc {
             TxnAccount::Assets(idxs) => Self::close_account(&mut self.assets, &idxs, at)?,
@@ -230,7 +228,7 @@ impl AccountStore {
         None
     }
 
-    pub fn txnify(&self, acc: &Account<'_>, date: NaiveDate) -> anyhow::Result<TxnAccount> {
+    pub fn txnify(&self, acc: &Account<'_>, date: NaiveDate) -> Result<TxnAccount> {
         let txn_account = match acc {
             Account::Assets(val) => self.lookup_index(val).map(TxnAccount::Assets),
             Account::Expenses(val) => self.lookup_index(val).map(TxnAccount::Expenses),
@@ -241,22 +239,19 @@ impl AccountStore {
 
         txn_account
             .and_then(|txnacct| self.txn_account_valid_at(date, txnacct))
-            .ok_or(anyhow::Error::msg("unopened account"))
+            .ok_or(anyhow!("unopened account"))
     }
 
-    fn lookup_segments<'a>(&'a self, v: &Vec<usize>) -> anyhow::Result<Vec<&'a str>> {
+    fn lookup_segments<'a>(&'a self, v: &Vec<usize>) -> Result<Vec<&'a str>> {
         let mut segments = Vec::new();
         for &idx in v {
-            let segment = self
-                .segments
-                .get(idx)
-                .ok_or(anyhow::Error::msg("undefined account"))?;
+            let segment = self.segments.get(idx).ok_or(anyhow!("undefined account"))?;
             segments.push(segment.as_str());
         }
         Ok(segments)
     }
 
-    pub fn accountify(&self, actxn: &TxnAccount) -> anyhow::Result<Account> {
+    pub fn accountify(&self, actxn: &TxnAccount) -> Result<Account> {
         match actxn {
             TxnAccount::Assets(idxs) => Ok(Account::Assets(self.lookup_segments(idxs)?)),
             TxnAccount::Expenses(idxs) => Ok(Account::Expenses(self.lookup_segments(idxs)?)),
@@ -270,15 +265,16 @@ impl AccountStore {
 #[cfg(test)]
 mod tests {
     use crate::account::{Account, AccountStore, TxnAccount};
+    use anyhow::{anyhow, Result};
     use chrono::NaiveDate;
 
     #[test]
-    fn test_open_account() -> anyhow::Result<()> {
+    fn test_open_account() -> Result<()> {
         let mut store = AccountStore::new();
-        let date1 = NaiveDate::from_ymd(2021, 10, 25);
-        let date2 = NaiveDate::from_ymd(2021, 10, 28);
-        let account1: Account = "Assets:Bank:Jawir".try_into().unwrap();
-        let account2: Account = "Expenses:Dining".try_into().unwrap();
+        let date1 = NaiveDate::from_ymd_opt(2021, 10, 25).ok_or(anyhow!("invalid date"))?;
+        let date2 = NaiveDate::from_ymd_opt(2021, 10, 28).ok_or(anyhow!("invalid date"))?;
+        let account1: Account = "Assets:Bank:Jawir".try_into()?;
+        let account2: Account = "Expenses:Dining".try_into()?;
         store.open(&account1, date1)?;
         store.open(&account2, date2)?;
         assert_eq!(
@@ -294,10 +290,7 @@ mod tests {
             "unopened account"
         );
         assert_eq!(
-            format!(
-                "{}",
-                store.accountify(&TxnAccount::Assets(vec![0, 1])).unwrap()
-            ),
+            format!("{}", store.accountify(&TxnAccount::Assets(vec![0, 1]))?),
             "Assets:Bank:Jawir",
         );
         Ok(())
