@@ -90,6 +90,7 @@ pub enum TransactionState {
     Settled,   // '*'
     Unsettled, // '!'
     Recurring, // '#'
+    #[allow(dead_code)]
     Virtual,   // No symbol, transaction automatically inserted to internal data structure
 }
 

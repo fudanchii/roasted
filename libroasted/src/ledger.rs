@@ -159,7 +159,7 @@ impl Ledger {
         let mut exchanges: Vec<Option<TxnAmount>> = Vec::new();
 
         for account in &txn.accounts {
-            accounts.push(self.accounts.txnify(&account, date)?);
+            accounts.push(self.accounts.txnify(account, date)?);
         }
 
         for amount in &txn.exchanges {
@@ -170,8 +170,8 @@ impl Ledger {
             state: header.state,
             payee: header.payee.map(|c| c.to_string()),
             title: header.title.to_string(),
-            accounts: accounts,
-            exchanges: exchanges,
+            accounts,
+            exchanges,
         })
     }
 

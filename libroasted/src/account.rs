@@ -124,7 +124,7 @@ impl AccountStore {
         Some(idxs)
     }
 
-    pub fn open<'a>(&mut self, acc: &Account<'a>, at: NaiveDate) -> anyhow::Result<()> {
+    pub fn open(&mut self, acc: &Account<'_>, at: NaiveDate) -> anyhow::Result<()> {
         match acc {
             Account::Assets(val) => {
                 let idxs = self.index_segments(val);
@@ -192,7 +192,7 @@ impl AccountStore {
             .ok_or(anyhow::Error::msg("valid account with no activities"))
     }
 
-    pub fn close<'a>(&mut self, acc: &Account<'a>, at: NaiveDate) -> anyhow::Result<()> {
+    pub fn close(&mut self, acc: &Account<'_>, at: NaiveDate) -> anyhow::Result<()> {
         let txn_acc = self.txnify(acc, at)?;
         match txn_acc {
             TxnAccount::Assets(idxs) => Self::close_account(&mut self.assets, &idxs, at)?,
@@ -230,17 +230,17 @@ impl AccountStore {
         None
     }
 
-    pub fn txnify<'a>(&self, acc: &Account<'a>, date: NaiveDate) -> anyhow::Result<TxnAccount> {
+    pub fn txnify(&self, acc: &Account<'_>, date: NaiveDate) -> anyhow::Result<TxnAccount> {
         let txn_account = match acc {
-            Account::Assets(val) => self.lookup_index(val).map(|idxs| TxnAccount::Assets(idxs)),
+            Account::Assets(val) => self.lookup_index(val).map(TxnAccount::Assets),
             Account::Expenses(val) => self
                 .lookup_index(val)
-                .map(|idxs| TxnAccount::Expenses(idxs)),
+                .map(TxnAccount::Expenses),
             Account::Liabilities(val) => self
                 .lookup_index(val)
-                .map(|idxs| TxnAccount::Liabilities(idxs)),
-            Account::Income(val) => self.lookup_index(val).map(|idxs| TxnAccount::Income(idxs)),
-            Account::Equity(val) => self.lookup_index(val).map(|idxs| TxnAccount::Equity(idxs)),
+                .map(TxnAccount::Liabilities),
+            Account::Income(val) => self.lookup_index(val).map(TxnAccount::Income),
+            Account::Equity(val) => self.lookup_index(val).map(TxnAccount::Equity),
         };
 
         txn_account

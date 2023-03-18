@@ -1,5 +1,6 @@
 Roasted
 ---
+[![codecov](https://codecov.io/gh/fudanchii/roasted/branch/master/graph/badge.svg?token=RLATEAP63J)](https://codecov.io/gh/fudanchii/roasted)
 
 Beancount ledger parser, written in Rust.
 

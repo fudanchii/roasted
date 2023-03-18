@@ -50,7 +50,7 @@ impl<'s> Statement<'s> {
         let date = NaiveDate::parse_from_str(datestr, "%Y-%m-%d")?;
 
         let stmt = match tag {
-            Rule::custom_statement => Self::Custom(date, pairs.map(|p| inner_str(p)).collect()),
+            Rule::custom_statement => Self::Custom(date, pairs.map(inner_str).collect()),
             Rule::open_statement => Self::OpenAccount(date, parse_next!(Account, pairs)),
             Rule::close_statement => Self::CloseAccount(date, parse_next!(Account, pairs)),
             Rule::pad_statement => Self::Pad(

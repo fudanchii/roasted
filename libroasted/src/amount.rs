@@ -68,7 +68,7 @@ impl<'a> Amount<'a> {
     }
 
     pub fn currency(&self) -> &str {
-        &self.currency
+        self.currency
     }
 }
 
@@ -123,9 +123,10 @@ impl CurrencyStore {
         }
     }
 
+    #[allow(dead_code)]
     pub fn currencyify(&self, idx: usize) -> Option<String> {
         let data = self.0.lock().unwrap();
-        data.get(idx).map(|s| s.clone())
+        data.get(idx).cloned()
     }
 }
 
