@@ -233,12 +233,8 @@ impl AccountStore {
     pub fn txnify(&self, acc: &Account<'_>, date: NaiveDate) -> anyhow::Result<TxnAccount> {
         let txn_account = match acc {
             Account::Assets(val) => self.lookup_index(val).map(TxnAccount::Assets),
-            Account::Expenses(val) => self
-                .lookup_index(val)
-                .map(TxnAccount::Expenses),
-            Account::Liabilities(val) => self
-                .lookup_index(val)
-                .map(TxnAccount::Liabilities),
+            Account::Expenses(val) => self.lookup_index(val).map(TxnAccount::Expenses),
+            Account::Liabilities(val) => self.lookup_index(val).map(TxnAccount::Liabilities),
             Account::Income(val) => self.lookup_index(val).map(TxnAccount::Income),
             Account::Equity(val) => self.lookup_index(val).map(TxnAccount::Equity),
         };

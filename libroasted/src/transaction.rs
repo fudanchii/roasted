@@ -91,7 +91,7 @@ pub enum TransactionState {
     Unsettled, // '!'
     Recurring, // '#'
     #[allow(dead_code)]
-    Virtual,   // No symbol, transaction automatically inserted to internal data structure
+    Virtual, // No symbol, transaction automatically inserted to internal data structure
 }
 
 pub struct Transaction {
