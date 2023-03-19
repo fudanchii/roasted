@@ -67,7 +67,10 @@ impl<'a> Amount<'a> {
                     price: None,
                 })
             }
-            _ => unreachable!(),
+            _ => Err(anyhow!(format!(
+                "unexpected token for amount: '{}'",
+                token.as_str()
+            ))),
         }
     }
 
@@ -140,11 +143,22 @@ impl CurrencyStore {
 
 #[cfg(test)]
 mod tests {
-    use crate::amount::{Amount, Price};
+    use crate::amount::{Amount, CurrencyStore, Price};
     use crate::parser::{LedgerParser, Rule};
     use pest::Parser;
 
     use anyhow::{anyhow, Result};
+
+    #[test]
+    fn parse_wrong_token() -> Result<()> {
+        let mut tokens = LedgerParser::parse(Rule::account, "Assets:Checking")?;
+        let amount = Amount::parse(tokens.next().unwrap());
+        assert_eq!(
+            format!("{}", amount.unwrap_err()),
+            "unexpected token for amount: 'Assets:Checking'"
+        );
+        Ok(())
+    }
 
     #[test]
     fn parse_amount() -> Result<()> {
@@ -162,6 +176,24 @@ mod tests {
                 })
             }
         );
+
+        assert_eq!(amount.nominal(), 1337f64);
+        assert_eq!(amount.currency(), "USD");
+
+        Ok(())
+    }
+
+    #[test]
+    fn txnify_amount() -> Result<()> {
+        let mut cs = CurrencyStore::new();
+        let txn_amount = cs.amount_txnify(&Amount {
+            nominal: 999999f64,
+            currency: "ZWL",
+            price: None,
+        });
+
+        assert_eq!(txn_amount.nominal, 999999f64);
+        assert_eq!(txn_amount.currency, 0);
 
         Ok(())
     }

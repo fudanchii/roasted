@@ -7,7 +7,6 @@ use crate::{
 };
 use chrono::naive::NaiveDate;
 use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
 
 use crate::parser::Rule;
 use pest::iterators::Pair;
@@ -40,7 +39,7 @@ pub struct Ledger {
     accounts: AccountStore,
     bookings: BTreeMap<NaiveDate, DayBook>,
     options: HashMap<String, String>,
-    currencies: Arc<CurrencyStore>,
+    currencies: CurrencyStore,
 }
 
 macro_rules! daybook_insert {
@@ -63,7 +62,7 @@ impl Ledger {
             accounts: AccountStore::new(),
             bookings: BTreeMap::new(),
             options: HashMap::new(),
-            currencies: Arc::new(CurrencyStore::new()),
+            currencies: CurrencyStore::new(),
         }
     }
 
