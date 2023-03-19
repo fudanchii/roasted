@@ -134,13 +134,7 @@ impl AccountStore {
             }
         }
 
-        txn! {
-            Assets,
-            Expenses,
-            Income,
-            Liabilities,
-            Equity
-        }
+        txn![Assets, Expenses, Income, Liabilities, Equity];
 
         Ok(())
     }
@@ -205,7 +199,10 @@ impl AccountStore {
 
         txn_account
             .and_then(|txnacct| self.txn_account_valid_at(date, txnacct))
-            .ok_or(anyhow!("unopened account"))
+            .ok_or(anyhow!(format!(
+                "account `{}' is not opened at {}",
+                acc, date
+            )))
     }
 
     fn lookup_segments<'a>(&'a self, v: &Vec<usize>) -> Result<Vec<&'a str>> {
@@ -288,31 +285,61 @@ mod tests {
         Ok(())
     }
 
+    fn open_accounts() -> Result<[Account<'static>; 5]> {
+        Ok([
+            "Assets:Bank:Jawir".try_into()?,
+            "Expenses:Dining".try_into()?,
+            "Income:Salary".try_into()?,
+            "Liabilities:Bank:CreditCard".try_into()?,
+            "Equity:Opening-Balance".try_into()?,
+        ])
+    }
+
     #[test]
-    fn test_open_account() -> Result<()> {
+    fn test_open_close_account() -> Result<()> {
         let mut store = AccountStore::new();
         let date1 = NaiveDate::from_ymd_opt(2021, 10, 25).ok_or(anyhow!("invalid date"))?;
         let date2 = NaiveDate::from_ymd_opt(2021, 10, 28).ok_or(anyhow!("invalid date"))?;
-        let account1: Account = "Assets:Bank:Jawir".try_into()?;
-        let account2: Account = "Expenses:Dining".try_into()?;
-        store.open(&account1, date1)?;
-        store.open(&account2, date2)?;
-        assert_eq!(
-            store.txnify(&account1, date1)?,
-            TxnAccount::Assets(vec![0, 1])
-        );
-        assert_eq!(
-            store.txnify(&account2, date2)?,
-            TxnAccount::Expenses(vec![2])
-        );
-        assert_eq!(
-            format!("{}", store.txnify(&account2, date1).unwrap_err()),
-            "unopened account"
-        );
-        assert_eq!(
-            format!("{}", store.accountify(&TxnAccount::Assets(vec![0, 1]))?),
-            "Assets:Bank:Jawir",
-        );
+        let date3 = NaiveDate::from_ymd_opt(2021, 11, 05).ok_or(anyhow!("invalid date"))?;
+        let date4 = NaiveDate::from_ymd_opt(2021, 11, 13).ok_or(anyhow!("invalid date"))?;
+        let accounts = open_accounts()?;
+
+        macro_rules! assert_opened_accounts {
+            ($(($idx:literal, $type:ident, $inner:tt, $date:ident)),*,) => {
+                $(store.open(&accounts[$idx], $date)?;)*
+
+                $(
+                assert_eq!(
+                    store.txnify(&accounts[$idx], $date)?,
+                    TxnAccount::$type(vec!$inner)
+                );
+                )*
+
+                assert_eq!(
+                    format!("{}", store.txnify(&accounts[1], date1).unwrap_err()),
+                    "account `Expenses:Dining' is not opened at 2021-10-25"
+                );
+
+                $(store.close(&accounts[$idx], date3)?;)*
+                $(assert!(store.txnify(&accounts[$idx], date4).is_err());)*
+
+                $(
+                    assert_eq!(
+                        store.accountify(&TxnAccount::$type(vec![0, 1]))?,
+                        Account::$type(vec!["Bank", "Jawir"])
+                    );
+                )*
+            }
+        };
+
+        assert_opened_accounts![
+            (0, Assets, [0, 1], date1),
+            (1, Expenses, [2], date2),
+            (2, Income, [3], date1),
+            (3, Liabilities, [0, 4], date2),
+            (4, Equity, [5], date1),
+        ];
+
         Ok(())
     }
 }
