@@ -285,7 +285,7 @@ mod tests {
         Ok(())
     }
 
-    fn open_accounts() -> Result<[Account<'static>; 5]> {
+    fn create_accounts() -> Result<[Account<'static>; 5]> {
         Ok([
             "Assets:Bank:Jawir".try_into()?,
             "Expenses:Dining".try_into()?,
@@ -302,12 +302,15 @@ mod tests {
         let date2 = NaiveDate::from_ymd_opt(2021, 10, 28).ok_or(anyhow!("invalid date"))?;
         let date3 = NaiveDate::from_ymd_opt(2021, 11, 05).ok_or(anyhow!("invalid date"))?;
         let date4 = NaiveDate::from_ymd_opt(2021, 11, 13).ok_or(anyhow!("invalid date"))?;
-        let accounts = open_accounts()?;
+        let accounts = create_accounts()?;
 
         macro_rules! assert_opened_accounts {
             ($(($idx:literal, $type:ident, $inner:tt, $date:ident)),*,) => {
+                /// Open accounts
                 $(store.open(&accounts[$idx], $date)?;)*
 
+                /// Assert if account can be used for transaction
+                /// at given date
                 $(
                 assert_eq!(
                     store.txnify(&accounts[$idx], $date)?,
@@ -315,20 +318,39 @@ mod tests {
                 );
                 )*
 
+                /// Assert that valid account cannot be used
+                /// before the open date
                 assert_eq!(
                     format!("{}", store.txnify(&accounts[1], date1).unwrap_err()),
                     "account `Expenses:Dining' is not opened at 2021-10-25"
                 );
 
+                /// Close accounts at later date
                 $(store.close(&accounts[$idx], date3)?;)*
+
+                /// Assert that account cannot be used at further date after
+                /// it was closed at the previous date.
                 $(assert!(store.txnify(&accounts[$idx], date4).is_err());)*
 
+                /// Assert that we can create account from the given transactional account
+                /// regardless its state
                 $(
-                    assert_eq!(
-                        store.accountify(&TxnAccount::$type(vec![0, 1]))?,
-                        Account::$type(vec!["Bank", "Jawir"])
-                    );
+                assert_eq!(
+                    store.accountify(&TxnAccount::$type(vec![0, 1]))?,
+                    Account::$type(vec!["Bank", "Jawir"])
+                );
                 )*
+
+                /// Reassert that accounts can still be used for transaction
+                /// before the close date
+                $(
+                assert_eq!(
+                    store.txnify(&accounts[$idx], date2)?,
+                    TxnAccount::$type(vec!$inner)
+                );
+                )*
+
+
             }
         };
 
