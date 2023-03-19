@@ -1,4 +1,5 @@
 use crate::parser::Rule;
+use anyhow::{anyhow, Result};
 use pest::iterators::Pair;
 
 use std::sync::Mutex;
@@ -10,11 +11,18 @@ pub struct Price<'s> {
 }
 
 impl<'p> Price<'p> {
-    pub fn parse(token: Pair<'p, Rule>) -> anyhow::Result<Price<'p>> {
+    pub fn parse(token: Pair<'p, Rule>) -> Result<Price<'p>> {
         let mut amount = token.into_inner();
         Ok(Price {
-            nominal: amount.next().unwrap().as_str().parse::<f64>().unwrap(),
-            currency: amount.next().unwrap().as_str(),
+            nominal: amount
+                .next()
+                .ok_or(anyhow!(format!("invalid nominal: '{}'", amount.as_str())))?
+                .as_str()
+                .parse::<f64>()?,
+            currency: amount
+                .next()
+                .ok_or(anyhow!(format!("invalid currency: '{}'", amount.as_str())))?
+                .as_str(),
         })
     }
 }
@@ -27,19 +35,19 @@ pub struct Amount<'s> {
 }
 
 impl<'a> Amount<'a> {
-    pub fn parse(token: Pair<'a, Rule>) -> anyhow::Result<Amount<'a>> {
+    pub fn parse(token: Pair<'a, Rule>) -> Result<Amount<'a>> {
         match token.as_rule() {
             Rule::amount_with_price => {
                 let mut pairs = token.into_inner();
                 let mut amount = Self::parse(
                     pairs
                         .next()
-                        .ok_or(anyhow::Error::msg("invalid next token, expected amount"))?,
+                        .ok_or(anyhow!(format!("invalid amount: '{}'", pairs.as_str())))?,
                 )?;
                 let price = Price::parse(
                     pairs
                         .next()
-                        .ok_or(anyhow::Error::msg("invalid next token, expected price"))?,
+                        .ok_or(anyhow!(format!("invalid price: '{}'", pairs.as_str())))?,
                 )?;
                 amount.price = Some(price);
                 Ok(amount)
@@ -49,12 +57,12 @@ impl<'a> Amount<'a> {
                 Ok(Amount {
                     nominal: amount
                         .next()
-                        .ok_or(anyhow::Error::msg("invalid next token, expected nominal"))?
+                        .ok_or(anyhow!(format!("invalid nominal: '{}'", amount.as_str())))?
                         .as_str()
                         .parse::<f64>()?,
                     currency: amount
                         .next()
-                        .ok_or(anyhow::Error::msg("invalid next token, expected currency"))?
+                        .ok_or(anyhow!(format!("invalid currency: '{}'", amount.as_str())))?
                         .as_str(),
                     price: None,
                 })
@@ -136,10 +144,11 @@ mod tests {
     use crate::parser::{LedgerParser, Rule};
     use pest::Parser;
 
+    use anyhow::{anyhow, Result};
+
     #[test]
-    fn parse_amount() {
-        let mut tokens = LedgerParser::parse(Rule::amount_with_price, "1337 USD @ 1000 IDR")
-            .unwrap_or_else(|e| panic!("{}", e));
+    fn parse_amount() -> Result<()> {
+        let mut tokens = LedgerParser::parse(Rule::amount_with_price, "1337 USD @ 1000 IDR")?;
 
         let amount = Amount::parse(tokens.next().unwrap()).unwrap();
         assert_eq!(
@@ -153,5 +162,7 @@ mod tests {
                 })
             }
         );
+
+        Ok(())
     }
 }
