@@ -189,11 +189,16 @@ mod tests {
         let txn_amount = cs.amount_txnify(&Amount {
             nominal: 999999f64,
             currency: "ZWL",
-            price: None,
+            price: Some(Price {
+                nominal: 1f64,
+                currency: "USD",
+            }),
         });
 
         assert_eq!(txn_amount.nominal, 999999f64);
         assert_eq!(txn_amount.currency, 0);
+        assert_eq!(txn_amount.price.as_ref().unwrap().nominal, 1f64);
+        assert_eq!(txn_amount.price.as_ref().unwrap().currency, 1);
 
         Ok(())
     }
