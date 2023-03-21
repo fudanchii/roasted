@@ -106,12 +106,8 @@ impl Ledger {
     }
 
     fn custom(&mut self, date: NaiveDate, args: Vec<&str>) -> anyhow::Result<()> {
-        daybook_insert!(
-            self,
-            date,
-            custom,
-            args.iter().map(|s| s.to_string()).collect()
-        )
+        let params = args.iter().map(|s| s.to_string()).collect();
+        daybook_insert!(self, date, custom, params)
     }
 
     fn open_account(&mut self, date: NaiveDate, account: &Account<'_>) -> anyhow::Result<()> {
