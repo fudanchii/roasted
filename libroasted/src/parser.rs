@@ -32,11 +32,10 @@ pub fn parse(input: &str, carried_ledger: Option<Ledger>) -> Result<Ledger> {
             Rule::include => {
                 let statement_str = statement.as_str().to_string();
                 ledger = parse_file(
-                    &Path::new(inner_str(
+                    Path::new(inner_str(
                         statement
                             .into_inner()
-                            .skip(1)
-                            .next()
+                            .nth(1)
                             .ok_or(anyhow!(format!("unexpected token: {}", statement_str)))?,
                     )),
                     Some(ledger),
