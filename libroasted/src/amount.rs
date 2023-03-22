@@ -147,7 +147,7 @@ mod tests {
     use crate::parser::{LedgerParser, Rule};
     use pest::Parser;
 
-    use anyhow::{anyhow, Result};
+    use anyhow::Result;
 
     #[test]
     fn parse_wrong_token() -> Result<()> {
@@ -185,7 +185,7 @@ mod tests {
 
     #[test]
     fn txnify_amount() -> Result<()> {
-        let mut cs = CurrencyStore::new();
+        let cs = CurrencyStore::new();
         let txn_amount = cs.amount_txnify(&Amount {
             nominal: 999999f64,
             currency: "ZWL",

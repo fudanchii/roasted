@@ -306,11 +306,11 @@ mod tests {
 
         macro_rules! assert_opened_accounts {
             ($(($idx:literal, $type:ident, $inner:tt, $date:ident)),*,) => {
-                /// Open accounts
+                // Open accounts
                 $(store.open(&accounts[$idx], $date)?;)*
 
-                /// Assert if account can be used for transaction
-                /// at given date
+                // Assert if account can be used for transaction
+                // at given date
                 $(
                 assert_eq!(
                     store.txnify(&accounts[$idx], $date)?,
@@ -318,22 +318,22 @@ mod tests {
                 );
                 )*
 
-                /// Assert that valid account cannot be used
-                /// before the open date
+                // Assert that valid account cannot be used
+                // before the open date
                 assert_eq!(
                     format!("{}", store.txnify(&accounts[1], date1).unwrap_err()),
                     "account `Expenses:Dining' is not opened at 2021-10-25"
                 );
 
-                /// Close accounts at later date
+                // Close accounts at later date
                 $(store.close(&accounts[$idx], date3)?;)*
 
-                /// Assert that account cannot be used at further date after
-                /// it was closed at the previous date.
+                // Assert that account cannot be used at further date after
+                // it was closed at the previous date.
                 $(assert!(store.txnify(&accounts[$idx], date4).is_err());)*
 
-                /// Assert that we can create account from the given transactional account
-                /// regardless its state
+                // Assert that we can create account from the given transactional account
+                // regardless its state
                 $(
                 assert_eq!(
                     store.accountify(&TxnAccount::$type(vec![0, 1]))?,
@@ -341,8 +341,8 @@ mod tests {
                 );
                 )*
 
-                /// Reassert that accounts can still be used for transaction
-                /// before the close date
+                // Reassert that accounts can still be used for transaction
+                // before the close date
                 $(
                 assert_eq!(
                     store.txnify(&accounts[$idx], date2)?,
@@ -352,7 +352,7 @@ mod tests {
 
 
             }
-        };
+        }
 
         assert_opened_accounts![
             (0, Assets, [0, 1], date1),

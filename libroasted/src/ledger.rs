@@ -187,6 +187,8 @@ mod tests {
     use crate::statement::Statement;
     use chrono::NaiveDate;
 
+    use anyhow::{anyhow, Result};
+
     #[test]
     fn test_set_option() {
         let mut ledger = Ledger::new();
@@ -195,13 +197,15 @@ mod tests {
     }
 
     #[test]
-    fn test_custom_statement() {
+    fn test_custom_statement() -> Result<()> {
         let mut ledger = Ledger::new();
-        let date = NaiveDate::from_ymd(2021, 5, 20);
-        ledger.process_statement(Statement::Custom(date, vec!["author", "team rocket"]));
+        let date = NaiveDate::from_ymd_opt(2021, 5, 20).ok_or(anyhow!("invalid date"))?;
+        ledger.process_statement(Statement::Custom(date, vec!["author", "team rocket"]))?;
         assert_eq!(
             ledger.get_at(&date).unwrap().get_custom()[0],
             vec!["author", "team rocket"]
         );
+
+        Ok(())
     }
 }

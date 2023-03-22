@@ -85,28 +85,33 @@ mod tests {
     use chrono::NaiveDate;
     use pest::Parser;
 
+    use anyhow::{anyhow, Result};
+
     use std::convert::TryFrom;
 
     #[test]
-    fn parse_custom_statement() -> anyhow::Result<()> {
+    fn parse_custom_statement() -> Result<()> {
         let mut ast =
             LedgerParser::parse(Rule::statement, r#"2021-01-01 custom "author" "udhin""#)?;
         let statement = Statement::try_from(ast.next().unwrap())?;
         assert_eq!(
             statement,
-            Statement::Custom(NaiveDate::from_ymd(2021, 1, 1), vec!["author", "udhin"])
+            Statement::Custom(
+                NaiveDate::from_ymd_opt(2021, 1, 1).ok_or(anyhow!("invalid date"))?,
+                vec!["author", "udhin"]
+            )
         );
         Ok(())
     }
 
     #[test]
-    fn parse_open_statement() -> anyhow::Result<()> {
+    fn parse_open_statement() -> Result<()> {
         let mut ast = LedgerParser::parse(Rule::statement, "2021-02-02 open Assets:Bank:Jago")?;
-        let statement = Statement::try_from(ast.next().unwrap())?;
+        let statement = Statement::try_from(ast.next().ok_or(anyhow!("empty ast"))?)?;
         assert_eq!(
             statement,
             Statement::OpenAccount(
-                NaiveDate::from_ymd(2021, 2, 2),
+                NaiveDate::from_ymd_opt(2021, 2, 2).ok_or(anyhow!("invalid date"))?,
                 Account::Assets(vec!["Bank", "Jago"])
             )
         );
@@ -114,16 +119,16 @@ mod tests {
     }
 
     #[test]
-    fn parse_close_statement() -> anyhow::Result<()> {
+    fn parse_close_statement() -> Result<()> {
         let mut ast = LedgerParser::parse(
             Rule::statement,
             "2021-12-31 close Liabilities:CrediCard:VISA",
         )?;
-        let statement = Statement::try_from(ast.next().unwrap())?;
+        let statement = Statement::try_from(ast.next().ok_or(anyhow!("empty ast"))?)?;
         assert_eq!(
             statement,
             Statement::CloseAccount(
-                NaiveDate::from_ymd(2021, 12, 31),
+                NaiveDate::from_ymd_opt(2021, 12, 31).ok_or(anyhow!("invalid date"))?,
                 Account::Liabilities(vec!["CrediCard", "VISA"]),
             )
         );
@@ -131,16 +136,16 @@ mod tests {
     }
 
     #[test]
-    fn parse_pad_statement() -> anyhow::Result<()> {
+    fn parse_pad_statement() -> Result<()> {
         let mut ast = LedgerParser::parse(
             Rule::statement,
             "2021-11-10 pad Assets:Cash:OnHand Expenses:Wasted",
         )?;
-        let statement = Statement::try_from(ast.next().unwrap())?;
+        let statement = Statement::try_from(ast.next().ok_or(anyhow!("empty ast"))?)?;
         assert_eq!(
             statement,
             Statement::Pad(
-                NaiveDate::from_ymd(2021, 11, 10),
+                NaiveDate::from_ymd_opt(2021, 11, 10).ok_or(anyhow!("invalid date"))?,
                 Account::Assets(vec!["Cash", "OnHand"]),
                 Account::Expenses(vec!["Wasted"]),
             )
@@ -149,7 +154,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_balance_statement() -> anyhow::Result<()> {
+    fn parse_balance_statement() -> Result<()> {
         let mut ast = LedgerParser::parse(
             Rule::statement,
             "2021-02-28 balance\tAssets:Cash:OnHand \t 65750.55\tUSD",
@@ -158,7 +163,7 @@ mod tests {
         assert_eq!(
             statement,
             Statement::Balance(
-                NaiveDate::from_ymd(2021, 2, 28),
+                NaiveDate::from_ymd_opt(2021, 2, 28).ok_or(anyhow!("invalid date"))?,
                 Account::Assets(vec!["Cash", "OnHand"]),
                 Amount {
                     nominal: 65750.55f64,
@@ -171,7 +176,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_transaction_statement() -> anyhow::Result<()> {
+    fn parse_transaction_statement() -> Result<()> {
         let mut ast = LedgerParser::parse(
             Rule::statement,
             r#"2021-04-01 * "Gubuk mang Engking" "Splurge @ diner"
@@ -179,11 +184,11 @@ mod tests {
                  Expenses:Dining              50 USD
             "#,
         )?;
-        let statement = Statement::try_from(ast.next().unwrap())?;
+        let statement = Statement::try_from(ast.next().ok_or(anyhow!("empty ast"))?)?;
         assert_eq!(
             statement,
             Statement::Transaction(
-                NaiveDate::from_ymd(2021, 4, 1),
+                NaiveDate::from_ymd_opt(2021, 4, 1).ok_or(anyhow!("invalid date"))?,
                 TxnHeader {
                     state: TransactionState::Settled,
                     payee: Some("Gubuk mang Engking"),
