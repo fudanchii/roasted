@@ -5,6 +5,7 @@ use crate::{
     statement::Statement,
     transaction::{BalanceAssertion, PadTransaction, Transaction, TxnHeader, TxnList},
 };
+use anyhow::{anyhow, Result};
 use chrono::naive::NaiveDate;
 use std::collections::{BTreeMap, HashMap};
 
@@ -66,14 +67,18 @@ impl Ledger {
         }
     }
 
-    pub fn parse_option(&mut self, token: Pair<Rule>) -> anyhow::Result<()> {
+    pub fn parse_option(&mut self, token: Pair<Rule>) -> Result<()> {
         let mut option = token.into_inner();
-        let key = inner_str(option.next().ok_or(anyhow::Error::msg(
-            "invalid next token, expected option's key",
-        ))?);
-        let val = inner_str(option.next().ok_or(anyhow::Error::msg(
-            "invalid next token, expected option's value",
-        ))?);
+        let key = inner_str(
+            option
+                .next()
+                .ok_or(anyhow!(format!("invalid next token: {}", option.as_str()),))?,
+        );
+        let val = inner_str(
+            option
+                .next()
+                .ok_or(anyhow!(format!("invalid next token: {}", option.as_str()),))?,
+        );
         self.set_option(key, val);
         Ok(())
     }
@@ -183,11 +188,25 @@ impl Ledger {
 
 #[cfg(test)]
 mod tests {
+    use crate::account::Account;
     use crate::ledger::Ledger;
+    use crate::parser::{LedgerParser, Rule};
     use crate::statement::Statement;
     use chrono::NaiveDate;
 
     use anyhow::{anyhow, Result};
+    use pest::Parser;
+
+    #[test]
+    fn test_parse_option() -> Result<()> {
+        let mut ast = LedgerParser::parse(Rule::option, r#"option "author" "myself""#)?;
+        let mut ledger = Ledger::new();
+        ledger.parse_option(ast.next().ok_or(anyhow!("invalid token"))?)?;
+
+        assert_eq!(ledger.get_option("author").unwrap(), "myself");
+
+        Ok(())
+    }
 
     #[test]
     fn test_set_option() {
@@ -206,6 +225,17 @@ mod tests {
             vec!["author", "team rocket"]
         );
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_open_account() -> Result<()> {
+        let mut ledger = Ledger::new();
+        let date = NaiveDate::from_ymd_opt(2021, 5, 20).ok_or(anyhow!("invalid date"))?;
+        ledger.process_statement(Statement::OpenAccount(
+            date,
+            Account::Assets(vec!["Cash", "On-Hand"]),
+        ))?;
         Ok(())
     }
 }

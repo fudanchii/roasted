@@ -300,7 +300,7 @@ mod tests {
         let mut store = AccountStore::new();
         let date1 = NaiveDate::from_ymd_opt(2021, 10, 25).ok_or(anyhow!("invalid date"))?;
         let date2 = NaiveDate::from_ymd_opt(2021, 10, 28).ok_or(anyhow!("invalid date"))?;
-        let date3 = NaiveDate::from_ymd_opt(2021, 11, 05).ok_or(anyhow!("invalid date"))?;
+        let date3 = NaiveDate::from_ymd_opt(2021, 11, 5).ok_or(anyhow!("invalid date"))?;
         let date4 = NaiveDate::from_ymd_opt(2021, 11, 13).ok_or(anyhow!("invalid date"))?;
         let accounts = create_accounts()?;
 
