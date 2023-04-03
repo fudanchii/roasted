@@ -30,8 +30,20 @@ impl DayBook {
         }
     }
 
-    pub fn get_custom(&self) -> &Vec<Vec<String>> {
+    pub fn custom(&self) -> &Vec<Vec<String>> {
         &self.custom
+    }
+
+    pub fn pads(&self) -> &Vec<PadTransaction> {
+        &self.pads
+    }
+
+    pub fn balance_assertions(&self) -> &Vec<BalanceAssertion> {
+        &self.balance_asserts
+    }
+
+    pub fn transactions(&self) -> &Vec<Transaction> {
+        &self.transactions
     }
 }
 
@@ -225,7 +237,7 @@ mod tests {
         let date = NaiveDate::from_ymd_opt(2021, 5, 20).ok_or(anyhow!("invalid date"))?;
         ledger.process_statement(Statement::Custom(date, vec!["author", "team rocket"]))?;
         assert_eq!(
-            ledger.get_at(&date).unwrap().get_custom()[0],
+            ledger.get_at(&date).unwrap().custom()[0],
             vec!["author", "team rocket"]
         );
 
@@ -253,6 +265,29 @@ mod tests {
             "account `Assets:Cash:On-Hand' is not opened at 2022-05-21",
             format!("{}", ledger.txn_account(&acct, date3).unwrap_err())
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_pad_transaction() -> Result<()> {
+        let mut ledger = Ledger::new();
+        let date = NaiveDate::from_ymd_opt(2021, 5, 20).ok_or(anyhow!("invalid date"))?;
+        let acct_source = Account::Assets(vec!["Bank", "Suisse"]);
+        let acct_target = Account::Expenses(vec!["Travels", "Airplane", "Emirates"]);
+
+        ledger.process_statement(Statement::OpenAccount(date, acct_source.clone()))?;
+        ledger.process_statement(Statement::OpenAccount(date, acct_target.clone()))?;
+        ledger.process_statement(Statement::Pad(date, acct_target, acct_source))?;
+
+        let bookings = ledger.get_at(&date).ok_or(anyhow!("no daybook"))?;
+
+        assert_eq!(bookings.pads().len(), 1);
+        assert_eq!(
+            bookings.pads()[0].target,
+            TxnAccount::Expenses(vec![2, 3, 4])
+        );
+        assert_eq!(bookings.pads()[0].source, TxnAccount::Assets(vec![0, 1]));
 
         Ok(())
     }
