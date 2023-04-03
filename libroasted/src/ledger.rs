@@ -91,9 +91,9 @@ impl Ledger {
         self.options.get(key)
     }
 
-    pub fn process_statement(&mut self, statement: Statement) -> anyhow::Result<()> {
+    pub fn process_statement(&mut self, statement: Statement) -> Result<()> {
         match statement {
-            Statement::Custom(date, args) => self.custom(date, args),
+            Statement::Custom(date, args) => self.custom(date, &args),
             Statement::OpenAccount(date, account) => self.open_account(date, &account),
             Statement::CloseAccount(date, account) => self.close_account(date, &account),
             Statement::Pad(date, target, source) => self.pad(date, &target, &source),
@@ -110,17 +110,21 @@ impl Ledger {
         self.bookings.get(date)
     }
 
-    fn custom(&mut self, date: NaiveDate, args: Vec<&str>) -> anyhow::Result<()> {
+    fn custom(&mut self, date: NaiveDate, args: &[&str]) -> Result<()> {
         let params = args.iter().map(|s| s.to_string()).collect();
         daybook_insert!(self, date, custom, params)
     }
 
-    fn open_account(&mut self, date: NaiveDate, account: &Account<'_>) -> anyhow::Result<()> {
+    fn open_account(&mut self, date: NaiveDate, account: &Account<'_>) -> Result<()> {
         self.accounts.open(account, date)
     }
 
-    fn close_account(&mut self, date: NaiveDate, account: &Account<'_>) -> anyhow::Result<()> {
+    fn close_account(&mut self, date: NaiveDate, account: &Account<'_>) -> Result<()> {
         self.accounts.close(account, date)
+    }
+
+    pub fn txn_account(&self, account: &Account, date: NaiveDate) -> Result<TxnAccount> {
+        self.accounts.txnify(account, date)
     }
 
     fn pad(
@@ -188,7 +192,7 @@ impl Ledger {
 
 #[cfg(test)]
 mod tests {
-    use crate::account::Account;
+    use crate::account::{Account, TxnAccount};
     use crate::ledger::Ledger;
     use crate::parser::{LedgerParser, Rule};
     use crate::statement::Statement;
@@ -232,10 +236,24 @@ mod tests {
     fn test_open_account() -> Result<()> {
         let mut ledger = Ledger::new();
         let date = NaiveDate::from_ymd_opt(2021, 5, 20).ok_or(anyhow!("invalid date"))?;
-        ledger.process_statement(Statement::OpenAccount(
-            date,
-            Account::Assets(vec!["Cash", "On-Hand"]),
-        ))?;
+        let date2 = NaiveDate::from_ymd_opt(2022, 5, 20).ok_or(anyhow!("invalid date"))?;
+        let date3 = NaiveDate::from_ymd_opt(2022, 5, 21).ok_or(anyhow!("invalid date"))?;
+        let acct = Account::Assets(vec!["Cash", "On-Hand"]);
+
+        ledger.process_statement(Statement::OpenAccount(date, acct.clone()))?;
+
+        assert_eq!(
+            TxnAccount::Assets(vec![0, 1]),
+            ledger.txn_account(&acct, date)?
+        );
+
+        ledger.process_statement(Statement::CloseAccount(date2, acct.clone()))?;
+
+        assert_eq!(
+            "account `Assets:Cash:On-Hand' is not opened at 2022-05-21",
+            format!("{}", ledger.txn_account(&acct, date3).unwrap_err())
+        );
+
         Ok(())
     }
 }
