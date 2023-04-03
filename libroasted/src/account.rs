@@ -141,7 +141,7 @@ impl AccountStore {
 
     fn close_account(
         account_set: &mut BTreeMap<Vec<usize>, AccountActivities>,
-        idxs: &Vec<usize>,
+        idxs: &[usize],
         at: NaiveDate,
     ) -> Result<()> {
         account_set
