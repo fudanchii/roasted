@@ -97,7 +97,7 @@ impl AccountStore {
         Default::default()
     }
 
-    fn index_segments(&mut self, v: &Vec<&str>) -> Vec<usize> {
+    fn index_segments(&mut self, v: &[&str]) -> Vec<usize> {
         let mut idxs: Vec<usize> = Vec::new();
         for segment in v {
             if let Some(ppos) = self.segments.iter().position(|s| s == segment) {
@@ -111,7 +111,7 @@ impl AccountStore {
         idxs
     }
 
-    fn lookup_index(&self, v: &Vec<&str>) -> Option<Vec<usize>> {
+    fn lookup_index(&self, v: &[&str]) -> Option<Vec<usize>> {
         let mut idxs: Vec<usize> = Vec::new();
         for segment in v {
             let pos = self.segments.iter().position(|s| s == segment)?;
@@ -205,7 +205,7 @@ impl AccountStore {
             )))
     }
 
-    fn lookup_segments<'a>(&'a self, v: &Vec<usize>) -> Result<Vec<&'a str>> {
+    fn lookup_segments<'a>(&'a self, v: &[usize]) -> Result<Vec<&'a str>> {
         let mut segments = Vec::new();
         for &idx in v {
             let segment = self.segments.get(idx).ok_or(anyhow!("undefined account"))?;
