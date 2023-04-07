@@ -205,6 +205,7 @@ impl Ledger {
 #[cfg(test)]
 mod tests {
     use crate::account::{Account, TxnAccount};
+    use crate::amount::{Amount, TxnAmount};
     use crate::ledger::Ledger;
     use crate::parser::{LedgerParser, Rule};
     use crate::statement::Statement;
@@ -288,6 +289,40 @@ mod tests {
             TxnAccount::Expenses(vec![2, 3, 4])
         );
         assert_eq!(bookings.pads()[0].source, TxnAccount::Assets(vec![0, 1]));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_balance_transaction() -> Result<()> {
+        let mut ledger = Ledger::new();
+        let date = NaiveDate::from_ymd_opt(2021, 5, 20).ok_or(anyhow!("invalid date"))?;
+        let tomorrow = NaiveDate::from_ymd_opt(2021, 5, 21).ok_or(anyhow!("invalid date"))?;
+        let account = Account::Assets(vec!["Bank", "SVB"]);
+        let amount = Amount {
+            nominal: 10_000_000f64,
+            currency: "USD",
+            price: None,
+        };
+        ledger.process_statement(Statement::OpenAccount(date, account.clone()))?;
+
+        ledger.process_statement(Statement::Balance(tomorrow, account.clone(), amount))?;
+
+        let bookings = ledger.get_at(&tomorrow).ok_or(anyhow!("no daybook"))?;
+
+        assert_eq!(bookings.balance_assertions().len(), 1);
+        assert_eq!(
+            bookings.balance_assertions()[0].account,
+            TxnAccount::Assets(vec![0, 1])
+        );
+        assert_eq!(
+            bookings.balance_assertions()[0].amount,
+            TxnAmount {
+                nominal: 10_000_000f64,
+                currency: 0,
+                price: None,
+            }
+        );
 
         Ok(())
     }
