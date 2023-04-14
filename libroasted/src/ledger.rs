@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, HashMap};
 use crate::parser::Rule;
 use pest::iterators::Pair;
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct DayBook {
     custom: Vec<Vec<String>>,
     pads: Vec<PadTransaction>,
@@ -209,6 +209,7 @@ mod tests {
     use crate::ledger::Ledger;
     use crate::parser::{LedgerParser, Rule};
     use crate::statement::Statement;
+    use crate::transaction::{TransactionState, TxnHeader, TxnList};
     use chrono::NaiveDate;
 
     use anyhow::{anyhow, Result};
@@ -323,6 +324,68 @@ mod tests {
                 price: None,
             }
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_transaction() -> Result<()> {
+        let mut ledger = Ledger::new();
+        let date = NaiveDate::from_ymd_opt(2021, 5, 20).ok_or(anyhow!("invalid date"))?;
+        let tomorrow = NaiveDate::from_ymd_opt(2021, 5, 21).ok_or(anyhow!("invalid date"))?;
+        let asset = Account::Assets(vec!["Bank", "SVB"]);
+        let expense = Account::Expenses(vec!["Monthly", "Splurge"]);
+
+        ledger.process_statement(Statement::OpenAccount(date, asset.clone()))?;
+        ledger.process_statement(Statement::OpenAccount(date, expense.clone()))?;
+
+        let txn_header = TxnHeader {
+            state: TransactionState::Settled,
+            payee: Some("travel-agent"),
+            title: "Europe Travel",
+        };
+
+        let txn_list = TxnList {
+            accounts: vec![asset, expense],
+            exchanges: vec![
+                None,
+                Some(Amount {
+                    nominal: 199_f64,
+                    currency: "USD",
+                    price: None,
+                }),
+            ],
+        };
+
+        ledger.process_statement(Statement::Transaction(date, txn_header, txn_list))?;
+
+        let bookings = ledger.get_at(&date).ok_or(anyhow!("no daybook"))?;
+
+        assert_eq!(bookings.transactions().len(), 1);
+        assert_eq!(
+            bookings.transactions()[0].accounts[0],
+            TxnAccount::Assets(vec![0, 1])
+        );
+
+        assert_eq!(
+            bookings.transactions()[0].accounts[1],
+            TxnAccount::Expenses(vec![2, 3])
+        );
+
+        assert_eq!(bookings.transactions()[0].exchanges[0], None);
+
+        assert_eq!(
+            bookings.transactions()[0].exchanges[1],
+            Some(TxnAmount {
+                nominal: 199f64,
+                currency: 0,
+                price: None,
+            })
+        );
+
+        let bookings = ledger.get_at(&tomorrow).ok_or(anyhow!("no daybook"));
+
+        assert_eq!("no daybook", format!("{}", bookings.unwrap_err()));
 
         Ok(())
     }

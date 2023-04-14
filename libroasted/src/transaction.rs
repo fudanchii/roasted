@@ -94,6 +94,7 @@ pub enum TransactionState {
     Virtual, // No symbol, transaction automatically inserted to internal data structure
 }
 
+#[derive(Debug)]
 pub struct Transaction {
     pub state: TransactionState,
     pub payee: Option<String>,
@@ -102,11 +103,13 @@ pub struct Transaction {
     pub exchanges: Vec<Option<TxnAmount>>,
 }
 
+#[derive(Debug)]
 pub struct BalanceAssertion {
     pub account: TxnAccount,
     pub amount: TxnAmount,
 }
 
+#[derive(Debug)]
 pub struct PadTransaction {
     pub target: TxnAccount,
     pub source: TxnAccount,
