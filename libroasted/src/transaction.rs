@@ -228,7 +228,7 @@ impl Transaction {
         };
 
         let amount = self.exchanges.iter().fold(amount, |acc: TxnAmount, item| {
-            return acc + &item.amount;
+            acc + &item.amount
         });
 
         Ok(amount)
