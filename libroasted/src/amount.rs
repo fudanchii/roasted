@@ -109,7 +109,7 @@ impl TxnAmount {
     }
 }
 
-impl std::ops::Add<&TxnAmount> for TxnAmount {
+impl std::ops::Add<&TxnAmount> for &TxnAmount {
     type Output = TxnAmount;
 
     fn add(self, rhs: &TxnAmount) -> Self::Output {
@@ -128,12 +128,12 @@ impl std::ops::Add<&TxnAmount> for TxnAmount {
         TxnAmount {
             nominal: sum,
             currency: self.currency,
-            prices: self.prices,
+            prices: self.prices.clone(),
         }
     }
 }
 
-impl std::ops::Sub<&TxnAmount> for TxnAmount {
+impl std::ops::Sub<&TxnAmount> for &TxnAmount {
     type Output = TxnAmount;
 
     fn sub(self, rhs: &TxnAmount) -> Self::Output {

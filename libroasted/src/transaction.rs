@@ -159,7 +159,7 @@ impl Transaction {
                 amount_elided: false,
             });
 
-            match total {
+            match total.as_ref() {
                 None => {
                     total.replace(amounts[x].as_ref().unwrap().clone());
                 }
@@ -174,7 +174,7 @@ impl Transaction {
                 pos,
                 Exchange {
                     account: accounts[pos].clone(),
-                    amount: TxnAmount::zero(exchanges[0].amount.currency) - total.as_ref().unwrap(),
+                    amount: -total.as_ref().unwrap(),
                     amount_elided: true,
                 },
             );
@@ -230,7 +230,7 @@ impl Transaction {
         let amount = self
             .exchanges
             .iter()
-            .fold(amount, |acc: TxnAmount, item| acc + &item.amount);
+            .fold(amount, |acc: TxnAmount, item| &acc + &item.amount);
 
         Ok(amount)
     }
