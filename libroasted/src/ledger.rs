@@ -1,9 +1,9 @@
 use crate::{
-    account::{Account, AccountStore, TxnAccount},
-    amount::{Amount, CurrencyStore, TxnAmount},
+    account::{AccountStore, ParsedAccount, TxnAccount},
+    amount::{CurrencyStore, ParsedAmount, TxnAmount},
     parser::inner_str,
     statement::Statement,
-    transaction::{BalanceAssertion, PadTransaction, Transaction, TxnHeader, TxnList},
+    transaction::{BalanceAssertion, PadTransaction, ParsedTransaction, Transaction, TxnHeader},
 };
 use anyhow::{anyhow, Result};
 use chrono::naive::NaiveDate;
@@ -127,23 +127,23 @@ impl Ledger {
         daybook_insert!(self, date, custom, params)
     }
 
-    fn open_account(&mut self, date: NaiveDate, account: &Account<'_>) -> Result<()> {
+    fn open_account(&mut self, date: NaiveDate, account: &ParsedAccount<'_>) -> Result<()> {
         self.accounts.open(account, date)
     }
 
-    fn close_account(&mut self, date: NaiveDate, account: &Account<'_>) -> Result<()> {
+    fn close_account(&mut self, date: NaiveDate, account: &ParsedAccount<'_>) -> Result<()> {
         self.accounts.close(account, date)
     }
 
-    pub fn txn_account(&self, account: &Account, date: NaiveDate) -> Result<TxnAccount> {
+    pub fn txn_account(&self, account: &ParsedAccount, date: NaiveDate) -> Result<TxnAccount> {
         self.accounts.txnify(account, date)
     }
 
     fn pad(
         &mut self,
         date: NaiveDate,
-        target: &Account<'_>,
-        source: &Account<'_>,
+        target: &ParsedAccount<'_>,
+        source: &ParsedAccount<'_>,
     ) -> anyhow::Result<()> {
         let pad_trx = PadTransaction {
             target: self.accounts.txnify(target, date)?,
@@ -155,8 +155,8 @@ impl Ledger {
     fn balance(
         &mut self,
         date: NaiveDate,
-        account: &Account<'_>,
-        amount: &Amount<'_>,
+        account: &ParsedAccount<'_>,
+        amount: &ParsedAmount<'_>,
     ) -> anyhow::Result<()> {
         let balance_assert = BalanceAssertion {
             account: self.accounts.txnify(account, date)?,
@@ -169,7 +169,7 @@ impl Ledger {
         &mut self,
         date: NaiveDate,
         header: &TxnHeader<'_>,
-        txn: &TxnList<'_>,
+        txn: &ParsedTransaction<'_>,
     ) -> anyhow::Result<Transaction> {
         let mut accounts: Vec<TxnAccount> = Vec::new();
         let mut exchanges: Vec<Option<TxnAmount>> = Vec::new();
@@ -182,20 +182,14 @@ impl Ledger {
             exchanges.push(amount.as_ref().map(|a| self.currencies.amount_txnify(a)));
         }
 
-        Ok(Transaction {
-            state: header.state,
-            payee: header.payee.map(|c| c.to_string()),
-            title: header.title.to_string(),
-            accounts,
-            exchanges,
-        })
+        Transaction::from_parser(header, accounts, exchanges)
     }
 
     fn transaction(
         &mut self,
         date: NaiveDate,
         header: TxnHeader<'_>,
-        txn: TxnList<'_>,
+        txn: ParsedTransaction<'_>,
     ) -> anyhow::Result<()> {
         let transaction = self.new_transaction(date, &header, &txn)?;
         daybook_insert!(self, date, transactions, transaction)
@@ -204,12 +198,12 @@ impl Ledger {
 
 #[cfg(test)]
 mod tests {
-    use crate::account::{Account, TxnAccount};
-    use crate::amount::{Amount, TxnAmount};
+    use crate::account::{ParsedAccount, TxnAccount};
+    use crate::amount::{ParsedAmount, TxnAmount};
     use crate::ledger::Ledger;
     use crate::parser::{LedgerParser, Rule};
     use crate::statement::Statement;
-    use crate::transaction::{TransactionState, TxnHeader, TxnList};
+    use crate::transaction::{Exchange, ParsedTransaction, TransactionState, TxnHeader};
     use chrono::NaiveDate;
 
     use anyhow::{anyhow, Result};
@@ -252,7 +246,7 @@ mod tests {
         let date = NaiveDate::from_ymd_opt(2021, 5, 20).ok_or(anyhow!("invalid date"))?;
         let date2 = NaiveDate::from_ymd_opt(2022, 5, 20).ok_or(anyhow!("invalid date"))?;
         let date3 = NaiveDate::from_ymd_opt(2022, 5, 21).ok_or(anyhow!("invalid date"))?;
-        let acct = Account::Assets(vec!["Cash", "On-Hand"]);
+        let acct = ParsedAccount::Assets(vec!["Cash", "On-Hand"]);
 
         ledger.process_statement(Statement::OpenAccount(date, acct.clone()))?;
 
@@ -275,8 +269,8 @@ mod tests {
     fn test_pad_transaction() -> Result<()> {
         let mut ledger = Ledger::new();
         let date = NaiveDate::from_ymd_opt(2021, 5, 20).ok_or(anyhow!("invalid date"))?;
-        let acct_source = Account::Assets(vec!["Bank", "Suisse"]);
-        let acct_target = Account::Expenses(vec!["Travels", "Airplane", "Emirates"]);
+        let acct_source = ParsedAccount::Assets(vec!["Bank", "Suisse"]);
+        let acct_target = ParsedAccount::Expenses(vec!["Travels", "Airplane", "Emirates"]);
 
         ledger.process_statement(Statement::OpenAccount(date, acct_source.clone()))?;
         ledger.process_statement(Statement::OpenAccount(date, acct_target.clone()))?;
@@ -299,8 +293,8 @@ mod tests {
         let mut ledger = Ledger::new();
         let date = NaiveDate::from_ymd_opt(2021, 5, 20).ok_or(anyhow!("invalid date"))?;
         let tomorrow = NaiveDate::from_ymd_opt(2021, 5, 21).ok_or(anyhow!("invalid date"))?;
-        let account = Account::Assets(vec!["Bank", "SVB"]);
-        let amount = Amount {
+        let account = ParsedAccount::Assets(vec!["Bank", "SVB"]);
+        let amount = ParsedAmount {
             nominal: 10_000_000f64,
             currency: "USD",
             price: None,
@@ -321,7 +315,7 @@ mod tests {
             TxnAmount {
                 nominal: 10_000_000f64,
                 currency: 0,
-                price: None,
+                prices: vec![],
             }
         );
 
@@ -333,8 +327,8 @@ mod tests {
         let mut ledger = Ledger::new();
         let date = NaiveDate::from_ymd_opt(2021, 5, 20).ok_or(anyhow!("invalid date"))?;
         let tomorrow = NaiveDate::from_ymd_opt(2021, 5, 21).ok_or(anyhow!("invalid date"))?;
-        let asset = Account::Assets(vec!["Bank", "SVB"]);
-        let expense = Account::Expenses(vec!["Monthly", "Splurge"]);
+        let asset = ParsedAccount::Assets(vec!["Bank", "SVB"]);
+        let expense = ParsedAccount::Expenses(vec!["Monthly", "Splurge"]);
 
         ledger.process_statement(Statement::OpenAccount(date, asset.clone()))?;
         ledger.process_statement(Statement::OpenAccount(date, expense.clone()))?;
@@ -345,11 +339,11 @@ mod tests {
             title: "Europe Travel",
         };
 
-        let txn_list = TxnList {
+        let txn_list = ParsedTransaction {
             accounts: vec![asset, expense],
             exchanges: vec![
                 None,
-                Some(Amount {
+                Some(ParsedAmount {
                     nominal: 199_f64,
                     currency: "USD",
                     price: None,
@@ -363,24 +357,29 @@ mod tests {
 
         assert_eq!(bookings.transactions().len(), 1);
         assert_eq!(
-            bookings.transactions()[0].accounts[0],
-            TxnAccount::Assets(vec![0, 1])
+            bookings.transactions()[0].exchanges[0],
+            Exchange {
+                account: TxnAccount::Assets(vec![0, 1]),
+                amount: TxnAmount {
+                    nominal: -199_f64,
+                    currency: 0,
+                    prices: vec![],
+                },
+                amount_elided: true,
+            },
         );
-
-        assert_eq!(
-            bookings.transactions()[0].accounts[1],
-            TxnAccount::Expenses(vec![2, 3])
-        );
-
-        assert_eq!(bookings.transactions()[0].exchanges[0], None);
 
         assert_eq!(
             bookings.transactions()[0].exchanges[1],
-            Some(TxnAmount {
-                nominal: 199f64,
-                currency: 0,
-                price: None,
-            })
+            Exchange {
+                account: TxnAccount::Expenses(vec![2, 3]),
+                amount: TxnAmount {
+                    nominal: 199_f64,
+                    currency: 0,
+                    prices: vec![],
+                },
+                amount_elided: false,
+            },
         );
 
         let bookings = ledger.get_at(&tomorrow).ok_or(anyhow!("no daybook"));

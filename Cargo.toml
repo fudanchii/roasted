@@ -3,3 +3,4 @@ members = [
   "libroasted",
   "xtask"
 ]
+resolver = "2"

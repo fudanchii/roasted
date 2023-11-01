@@ -1,7 +1,7 @@
-use crate::account::Account;
-use crate::amount::Amount;
+use crate::account::ParsedAccount;
+use crate::amount::ParsedAmount;
 use crate::parser::{inner_str, Rule};
-use crate::transaction::{TxnHeader, TxnList};
+use crate::transaction::{ParsedTransaction, TxnHeader};
 use chrono::NaiveDate;
 use pest::iterators::Pair;
 
@@ -10,11 +10,11 @@ use std::convert::TryFrom;
 #[derive(Debug, PartialEq)]
 pub enum Statement<'s> {
     Custom(NaiveDate, Vec<&'s str>),
-    OpenAccount(NaiveDate, Account<'s>),
-    CloseAccount(NaiveDate, Account<'s>),
-    Pad(NaiveDate, Account<'s>, Account<'s>),
-    Balance(NaiveDate, Account<'s>, Amount<'s>),
-    Transaction(NaiveDate, TxnHeader<'s>, TxnList<'s>),
+    OpenAccount(NaiveDate, ParsedAccount<'s>),
+    CloseAccount(NaiveDate, ParsedAccount<'s>),
+    Pad(NaiveDate, ParsedAccount<'s>, ParsedAccount<'s>),
+    Balance(NaiveDate, ParsedAccount<'s>, ParsedAmount<'s>),
+    Transaction(NaiveDate, TxnHeader<'s>, ParsedTransaction<'s>),
 }
 
 impl<'s> TryFrom<Pair<'s, Rule>> for Statement<'s> {
@@ -51,22 +51,22 @@ impl<'s> Statement<'s> {
 
         let stmt = match tag {
             Rule::custom_statement => Self::Custom(date, pairs.map(inner_str).collect()),
-            Rule::open_statement => Self::OpenAccount(date, parse_next!(Account, pairs)),
-            Rule::close_statement => Self::CloseAccount(date, parse_next!(Account, pairs)),
+            Rule::open_statement => Self::OpenAccount(date, parse_next!(ParsedAccount, pairs)),
+            Rule::close_statement => Self::CloseAccount(date, parse_next!(ParsedAccount, pairs)),
             Rule::pad_statement => Self::Pad(
                 date,
-                parse_next!(Account, pairs),
-                parse_next!(Account, pairs),
+                parse_next!(ParsedAccount, pairs),
+                parse_next!(ParsedAccount, pairs),
             ),
             Rule::balance_statement => Self::Balance(
                 date,
-                parse_next!(Account, pairs),
-                parse_next!(Amount, pairs),
+                parse_next!(ParsedAccount, pairs),
+                parse_next!(ParsedAmount, pairs),
             ),
             Rule::transaction => Self::Transaction(
                 date,
                 parse_next!(TxnHeader, pairs),
-                parse_next!(TxnList, pairs),
+                parse_next!(ParsedTransaction, pairs),
             ),
             _ => unreachable!(),
         };
@@ -77,11 +77,11 @@ impl<'s> Statement<'s> {
 
 #[cfg(test)]
 mod tests {
-    use crate::account::Account;
-    use crate::amount::Amount;
+    use crate::account::ParsedAccount;
+    use crate::amount::ParsedAmount;
     use crate::parser::{LedgerParser, Rule};
     use crate::statement::Statement;
-    use crate::transaction::{TransactionState, TxnHeader, TxnList};
+    use crate::transaction::{ParsedTransaction, TransactionState, TxnHeader};
     use chrono::NaiveDate;
     use pest::Parser;
 
@@ -112,7 +112,7 @@ mod tests {
             statement,
             Statement::OpenAccount(
                 NaiveDate::from_ymd_opt(2021, 2, 2).ok_or(anyhow!("invalid date"))?,
-                Account::Assets(vec!["Bank", "Jago"])
+                ParsedAccount::Assets(vec!["Bank", "Jago"])
             )
         );
         Ok(())
@@ -129,7 +129,7 @@ mod tests {
             statement,
             Statement::CloseAccount(
                 NaiveDate::from_ymd_opt(2021, 12, 31).ok_or(anyhow!("invalid date"))?,
-                Account::Liabilities(vec!["CrediCard", "VISA"]),
+                ParsedAccount::Liabilities(vec!["CrediCard", "VISA"]),
             )
         );
         Ok(())
@@ -146,8 +146,8 @@ mod tests {
             statement,
             Statement::Pad(
                 NaiveDate::from_ymd_opt(2021, 11, 10).ok_or(anyhow!("invalid date"))?,
-                Account::Assets(vec!["Cash", "OnHand"]),
-                Account::Expenses(vec!["Wasted"]),
+                ParsedAccount::Assets(vec!["Cash", "OnHand"]),
+                ParsedAccount::Expenses(vec!["Wasted"]),
             )
         );
         Ok(())
@@ -164,8 +164,8 @@ mod tests {
             statement,
             Statement::Balance(
                 NaiveDate::from_ymd_opt(2021, 2, 28).ok_or(anyhow!("invalid date"))?,
-                Account::Assets(vec!["Cash", "OnHand"]),
-                Amount {
+                ParsedAccount::Assets(vec!["Cash", "OnHand"]),
+                ParsedAmount {
                     nominal: 65750.55f64,
                     currency: "USD",
                     price: None,
@@ -194,14 +194,14 @@ mod tests {
                     payee: Some("Gubuk mang Engking"),
                     title: "Splurge @ diner",
                 },
-                TxnList {
+                ParsedTransaction {
                     accounts: vec![
-                        Account::Assets(vec!["Cash"]),
-                        Account::Expenses(vec!["Dining"]),
+                        ParsedAccount::Assets(vec!["Cash"]),
+                        ParsedAccount::Expenses(vec!["Dining"]),
                     ],
                     exchanges: vec![
                         None,
-                        Some(Amount {
+                        Some(ParsedAmount {
                             nominal: 50f64,
                             currency: "USD",
                             price: None,

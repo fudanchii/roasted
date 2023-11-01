@@ -5,15 +5,15 @@ use pest::iterators::Pair;
 use std::sync::Mutex;
 
 #[derive(Debug, PartialEq)]
-pub struct Price<'s> {
+pub struct ParsedPrice<'s> {
     pub(crate) nominal: f64,
     pub(crate) currency: &'s str,
 }
 
-impl<'p> Price<'p> {
-    pub fn parse(token: Pair<'p, Rule>) -> Result<Price<'p>> {
+impl<'p> ParsedPrice<'p> {
+    pub fn parse(token: Pair<'p, Rule>) -> Result<ParsedPrice<'p>> {
         let mut amount = token.into_inner();
-        Ok(Price {
+        Ok(Self {
             nominal: amount
                 .next()
                 .ok_or(anyhow!(format!("invalid nominal: '{}'", amount.as_str())))?
@@ -28,14 +28,14 @@ impl<'p> Price<'p> {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Amount<'s> {
+pub struct ParsedAmount<'s> {
     pub(crate) nominal: f64,
     pub(crate) currency: &'s str,
-    pub(crate) price: Option<Price<'s>>,
+    pub(crate) price: Option<ParsedPrice<'s>>,
 }
 
-impl<'a> Amount<'a> {
-    pub fn parse(token: Pair<'a, Rule>) -> Result<Amount<'a>> {
+impl<'a> ParsedAmount<'a> {
+    pub fn parse(token: Pair<'a, Rule>) -> Result<ParsedAmount<'a>> {
         match token.as_rule() {
             Rule::amount_with_price => {
                 let mut pairs = token.into_inner();
@@ -44,7 +44,7 @@ impl<'a> Amount<'a> {
                         .next()
                         .ok_or(anyhow!(format!("invalid amount: '{}'", pairs.as_str())))?,
                 )?;
-                let price = Price::parse(
+                let price = ParsedPrice::parse(
                     pairs
                         .next()
                         .ok_or(anyhow!(format!("invalid price: '{}'", pairs.as_str())))?,
@@ -54,7 +54,7 @@ impl<'a> Amount<'a> {
             }
             Rule::amount => {
                 let mut amount = token.into_inner();
-                Ok(Amount {
+                Ok(Self {
                     nominal: amount
                         .next()
                         .ok_or(anyhow!(format!("invalid nominal: '{}'", amount.as_str())))?
@@ -83,17 +83,76 @@ impl<'a> Amount<'a> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TxnPrice {
     pub nominal: f64,
     pub currency: usize,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TxnAmount {
     pub nominal: f64,
     pub currency: usize,
-    pub price: Option<TxnPrice>,
+    pub prices: Vec<TxnPrice>,
+}
+
+impl TxnAmount {
+    pub fn zero(currency: usize) -> Self {
+        Self {
+            nominal: 0f64,
+            currency,
+            prices: vec![],
+        }
+    }
+    pub fn is_zero(&self) -> bool {
+        self.nominal == 0f64
+    }
+}
+
+impl std::ops::Add<&TxnAmount> for TxnAmount {
+    type Output = TxnAmount;
+
+    fn add(self, rhs: &TxnAmount) -> Self::Output {
+        let sum: f64;
+
+        if self.currency == rhs.currency {
+            sum = self.nominal + rhs.nominal;
+        } else {
+            let conversion_unit = rhs
+                .prices
+                .iter()
+                .find(|&item| item.currency == self.currency)
+                .map(|c| c.nominal)
+                .unwrap_or(1f64);
+            sum = self.nominal + (rhs.nominal * conversion_unit);
+        }
+
+        TxnAmount {
+            nominal: sum,
+            currency: self.currency,
+            prices: self.prices,
+        }
+    }
+}
+
+impl std::ops::Sub<&TxnAmount> for TxnAmount {
+    type Output = TxnAmount;
+
+    fn sub(self, rhs: &TxnAmount) -> Self::Output {
+        self + &(-rhs)
+    }
+}
+
+impl std::ops::Neg for &TxnAmount {
+    type Output = TxnAmount;
+
+    fn neg(self) -> Self::Output {
+        Self::Output {
+            nominal: -self.nominal,
+            currency: self.currency,
+            prices: self.prices.clone(),
+        }
+    }
 }
 
 #[derive(Default)]
@@ -119,18 +178,21 @@ impl CurrencyStore {
         data.len() - 1
     }
 
-    pub fn price_txnify(&self, price: &Option<Price>) -> Option<TxnPrice> {
+    pub fn price_txnify(&self, price: &Option<ParsedPrice>) -> Option<TxnPrice> {
         price.as_ref().map(|p| TxnPrice {
             nominal: p.nominal,
             currency: self.txnify(p.currency),
         })
     }
 
-    pub fn amount_txnify(&self, amount: &Amount) -> TxnAmount {
+    pub fn amount_txnify(&self, amount: &ParsedAmount) -> TxnAmount {
         TxnAmount {
             nominal: amount.nominal,
             currency: self.txnify(amount.currency),
-            price: self.price_txnify(&amount.price),
+            prices: match &amount.price {
+                Some(_) => vec![self.price_txnify(&amount.price).unwrap()],
+                None => vec![],
+            },
         }
     }
 
@@ -143,7 +205,7 @@ impl CurrencyStore {
 
 #[cfg(test)]
 mod tests {
-    use crate::amount::{Amount, CurrencyStore, Price};
+    use crate::amount::{CurrencyStore, ParsedAmount, ParsedPrice};
     use crate::parser::{LedgerParser, Rule};
     use pest::Parser;
 
@@ -152,7 +214,7 @@ mod tests {
     #[test]
     fn parse_wrong_token() -> Result<()> {
         let mut tokens = LedgerParser::parse(Rule::account, "Assets:Checking")?;
-        let amount = Amount::parse(tokens.next().unwrap());
+        let amount = ParsedAmount::parse(tokens.next().unwrap());
         assert_eq!(
             format!("{}", amount.unwrap_err()),
             "unexpected token for amount: 'Assets:Checking'"
@@ -164,13 +226,13 @@ mod tests {
     fn parse_amount() -> Result<()> {
         let mut tokens = LedgerParser::parse(Rule::amount_with_price, "1337 USD @ 1000 IDR")?;
 
-        let amount = Amount::parse(tokens.next().unwrap()).unwrap();
+        let amount = ParsedAmount::parse(tokens.next().unwrap()).unwrap();
         assert_eq!(
             amount,
-            Amount {
+            ParsedAmount {
                 nominal: 1337f64,
                 currency: "USD",
-                price: Some(Price {
+                price: Some(ParsedPrice {
                     nominal: 1000f64,
                     currency: "IDR",
                 })
@@ -186,10 +248,10 @@ mod tests {
     #[test]
     fn txnify_amount() -> Result<()> {
         let cs = CurrencyStore::new();
-        let txn_amount = cs.amount_txnify(&Amount {
+        let txn_amount = cs.amount_txnify(&ParsedAmount {
             nominal: 999999f64,
             currency: "ZWL",
-            price: Some(Price {
+            price: Some(ParsedPrice {
                 nominal: 1f64,
                 currency: "USD",
             }),
@@ -197,8 +259,8 @@ mod tests {
 
         assert_eq!(txn_amount.nominal, 999999f64);
         assert_eq!(txn_amount.currency, 0);
-        assert_eq!(txn_amount.price.as_ref().unwrap().nominal, 1f64);
-        assert_eq!(txn_amount.price.as_ref().unwrap().currency, 1);
+        assert_eq!(txn_amount.prices[0].nominal, 1f64);
+        assert_eq!(txn_amount.prices[0].currency, 1);
 
         Ok(())
     }

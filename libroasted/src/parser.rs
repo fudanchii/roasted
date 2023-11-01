@@ -10,7 +10,7 @@ use std::path::Path;
 #[grammar = "ledger.pest"]
 pub struct LedgerParser;
 
-pub fn parse_file(path: &Path, carried_ledger: Option<Ledger>) -> Result<Ledger> {
+pub fn parse_file<P: AsRef<Path>>(path: P, carried_ledger: Option<Ledger>) -> Result<Ledger> {
     if carried_ledger.is_none() {
         return parse_file(path, Some(Ledger::new()));
     }
@@ -52,4 +52,20 @@ pub fn parse(input: &str, carried_ledger: Option<Ledger>) -> Result<Ledger> {
 
 pub fn inner_str(token: Pair<Rule>) -> &str {
     token.into_inner().next().unwrap().as_str()
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::parser;
+
+    #[test]
+    fn test_ledger_file_not_exist() {
+        let err = parser::parse_file("not_exist", None)
+            .map(|_| ())
+            .unwrap_err();
+        assert_eq!(
+            format!("{}", err.root_cause()),
+            "No such file or directory (os error 2)"
+        )
+    }
 }

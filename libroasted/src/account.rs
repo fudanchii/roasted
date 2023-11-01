@@ -9,7 +9,7 @@ use camelpaste::paste;
 use pest::iterators::Pair;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Account<'a> {
+pub enum ParsedAccount<'a> {
     Assets(Vec<&'a str>),
     Expenses(Vec<&'a str>),
     Liabilities(Vec<&'a str>),
@@ -17,50 +17,50 @@ pub enum Account<'a> {
     Equity(Vec<&'a str>),
 }
 
-impl<'a> Account<'a> {
+impl<'a> ParsedAccount<'a> {
     pub fn base_name(s: &'a str) -> Vec<&'a str> {
         s.split(':').skip(1).collect()
     }
 
-    pub fn parse(token: Pair<'a, Rule>) -> Result<Account<'a>> {
+    pub fn parse(token: Pair<'a, Rule>) -> Result<ParsedAccount<'a>> {
         token.as_str().try_into()
     }
 }
 
-impl<'a> fmt::Display for Account<'a> {
+impl<'a> fmt::Display for ParsedAccount<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Account::Assets(v) => write!(f, "Assets:{}", v.join(":")),
-            Account::Expenses(v) => write!(f, "Expenses:{}", v.join(":")),
-            Account::Liabilities(v) => write!(f, "Liabilities:{}", v.join(":")),
-            Account::Income(v) => write!(f, "Income:{}", v.join(":")),
-            Account::Equity(v) => write!(f, "Equity:{}", v.join(":")),
+            ParsedAccount::Assets(v) => write!(f, "Assets:{}", v.join(":")),
+            ParsedAccount::Expenses(v) => write!(f, "Expenses:{}", v.join(":")),
+            ParsedAccount::Liabilities(v) => write!(f, "Liabilities:{}", v.join(":")),
+            ParsedAccount::Income(v) => write!(f, "Income:{}", v.join(":")),
+            ParsedAccount::Equity(v) => write!(f, "Equity:{}", v.join(":")),
         }
     }
 }
 
-impl<'a> TryFrom<&'a str> for Account<'a> {
+impl<'a> TryFrom<&'a str> for ParsedAccount<'a> {
     type Error = anyhow::Error;
 
     fn try_from(s: &'a str) -> Result<Self> {
         if s.starts_with("Assets:") {
-            return Ok(Account::Assets(Account::base_name(s)));
+            return Ok(ParsedAccount::Assets(ParsedAccount::base_name(s)));
         }
 
         if s.starts_with("Expenses:") {
-            return Ok(Account::Expenses(Account::base_name(s)));
+            return Ok(ParsedAccount::Expenses(ParsedAccount::base_name(s)));
         }
 
         if s.starts_with("Liabilities:") {
-            return Ok(Account::Liabilities(Account::base_name(s)));
+            return Ok(ParsedAccount::Liabilities(ParsedAccount::base_name(s)));
         }
 
         if s.starts_with("Income:") {
-            return Ok(Account::Income(Account::base_name(s)));
+            return Ok(ParsedAccount::Income(ParsedAccount::base_name(s)));
         }
 
         if s.starts_with("Equity:") {
-            return Ok(Account::Equity(Account::base_name(s)));
+            return Ok(ParsedAccount::Equity(ParsedAccount::base_name(s)));
         }
 
         Err(anyhow!("input `{}' is not a valid token for Account", s))
@@ -121,11 +121,11 @@ impl AccountStore {
         Some(idxs)
     }
 
-    pub fn open(&mut self, acc: &Account<'_>, opened_at: NaiveDate) -> Result<()> {
+    pub fn open(&mut self, acc: &ParsedAccount<'_>, opened_at: NaiveDate) -> Result<()> {
         macro_rules! txn {
             ($($account_type:ident),*) => {
                 match acc {$(
-                    Account::$account_type(val) => paste! {{
+                    ParsedAccount::$account_type(val) => paste! {{
                         let idxs = self.index_segments(val);
                         self.[<$account_type:lower>]
                             .insert(idxs, AccountActivities {opened_at, closed_at: None});
@@ -150,7 +150,7 @@ impl AccountStore {
             .ok_or(anyhow!("valid account with no activities"))
     }
 
-    pub fn close(&mut self, acc: &Account<'_>, at: NaiveDate) -> Result<()> {
+    pub fn close(&mut self, acc: &ParsedAccount<'_>, at: NaiveDate) -> Result<()> {
         let txn_acc = self.txnify(acc, at)?;
         match txn_acc {
             TxnAccount::Assets(idxs) => Self::close_account(&mut self.assets, &idxs, at)?,
@@ -188,13 +188,13 @@ impl AccountStore {
         None
     }
 
-    pub fn txnify(&self, acc: &Account<'_>, date: NaiveDate) -> Result<TxnAccount> {
+    pub fn txnify(&self, acc: &ParsedAccount<'_>, date: NaiveDate) -> Result<TxnAccount> {
         let txn_account = match acc {
-            Account::Assets(val) => self.lookup_index(val).map(TxnAccount::Assets),
-            Account::Expenses(val) => self.lookup_index(val).map(TxnAccount::Expenses),
-            Account::Liabilities(val) => self.lookup_index(val).map(TxnAccount::Liabilities),
-            Account::Income(val) => self.lookup_index(val).map(TxnAccount::Income),
-            Account::Equity(val) => self.lookup_index(val).map(TxnAccount::Equity),
+            ParsedAccount::Assets(val) => self.lookup_index(val).map(TxnAccount::Assets),
+            ParsedAccount::Expenses(val) => self.lookup_index(val).map(TxnAccount::Expenses),
+            ParsedAccount::Liabilities(val) => self.lookup_index(val).map(TxnAccount::Liabilities),
+            ParsedAccount::Income(val) => self.lookup_index(val).map(TxnAccount::Income),
+            ParsedAccount::Equity(val) => self.lookup_index(val).map(TxnAccount::Equity),
         };
 
         txn_account
@@ -214,43 +214,45 @@ impl AccountStore {
         Ok(segments)
     }
 
-    pub fn accountify(&self, actxn: &TxnAccount) -> Result<Account> {
+    pub fn accountify(&self, actxn: &TxnAccount) -> Result<ParsedAccount> {
         match actxn {
-            TxnAccount::Assets(idxs) => Ok(Account::Assets(self.lookup_segments(idxs)?)),
-            TxnAccount::Expenses(idxs) => Ok(Account::Expenses(self.lookup_segments(idxs)?)),
-            TxnAccount::Liabilities(idxs) => Ok(Account::Liabilities(self.lookup_segments(idxs)?)),
-            TxnAccount::Income(idxs) => Ok(Account::Income(self.lookup_segments(idxs)?)),
-            TxnAccount::Equity(idxs) => Ok(Account::Equity(self.lookup_segments(idxs)?)),
+            TxnAccount::Assets(idxs) => Ok(ParsedAccount::Assets(self.lookup_segments(idxs)?)),
+            TxnAccount::Expenses(idxs) => Ok(ParsedAccount::Expenses(self.lookup_segments(idxs)?)),
+            TxnAccount::Liabilities(idxs) => {
+                Ok(ParsedAccount::Liabilities(self.lookup_segments(idxs)?))
+            }
+            TxnAccount::Income(idxs) => Ok(ParsedAccount::Income(self.lookup_segments(idxs)?)),
+            TxnAccount::Equity(idxs) => Ok(ParsedAccount::Equity(self.lookup_segments(idxs)?)),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::account::{Account, AccountStore, TxnAccount};
+    use crate::account::{AccountStore, ParsedAccount, TxnAccount};
     use anyhow::{anyhow, Result};
     use chrono::NaiveDate;
 
     #[test]
     fn test_print_account() {
         assert_eq!(
-            format!("{}", Account::Assets(vec!["Bank", "Swiss"])),
+            format!("{}", ParsedAccount::Assets(vec!["Bank", "Swiss"])),
             "Assets:Bank:Swiss"
         );
         assert_eq!(
-            format!("{}", Account::Expenses(vec!["Groceries", "Daily"])),
+            format!("{}", ParsedAccount::Expenses(vec!["Groceries", "Daily"])),
             "Expenses:Groceries:Daily"
         );
         assert_eq!(
-            format!("{}", Account::Liabilities(vec!["Mortgage", "House"])),
+            format!("{}", ParsedAccount::Liabilities(vec!["Mortgage", "House"])),
             "Liabilities:Mortgage:House"
         );
         assert_eq!(
-            format!("{}", Account::Income(vec!["Salary", "GOOGL"])),
+            format!("{}", ParsedAccount::Income(vec!["Salary", "GOOGL"])),
             "Income:Salary:GOOGL"
         );
         assert_eq!(
-            format!("{}", Account::Equity(vec!["Opening-Account"])),
+            format!("{}", ParsedAccount::Equity(vec!["Opening-Account"])),
             "Equity:Opening-Account"
         );
     }
@@ -258,26 +260,26 @@ mod tests {
     #[test]
     fn test_convert() -> Result<()> {
         assert_eq!(
-            Account::Assets(vec!["Checking", "Daily"]),
+            ParsedAccount::Assets(vec!["Checking", "Daily"]),
             "Assets:Checking:Daily".try_into()?
         );
         assert_eq!(
-            Account::Expenses(vec!["Clothing", "Dresses"]),
+            ParsedAccount::Expenses(vec!["Clothing", "Dresses"]),
             "Expenses:Clothing:Dresses".try_into()?
         );
         assert_eq!(
-            Account::Liabilities(vec!["Payable", "BigSis"]),
+            ParsedAccount::Liabilities(vec!["Payable", "BigSis"]),
             "Liabilities:Payable:BigSis".try_into()?
         );
         assert_eq!(
-            Account::Income(vec!["Stores", "Order"]),
+            ParsedAccount::Income(vec!["Stores", "Order"]),
             "Income:Stores:Order".try_into()?
         );
         assert_eq!(
-            Account::Equity(vec!["Previous-Balance"]),
+            ParsedAccount::Equity(vec!["Previous-Balance"]),
             "Equity:Previous-Balance".try_into()?
         );
-        let result: Result<Account> = "Outcome:Statement".try_into();
+        let result: Result<ParsedAccount> = "Outcome:Statement".try_into();
         assert_eq!(
             "input `Outcome:Statement' is not a valid token for Account",
             format!("{}", result.unwrap_err())
@@ -285,7 +287,7 @@ mod tests {
         Ok(())
     }
 
-    fn create_accounts() -> Result<[Account<'static>; 5]> {
+    fn create_accounts() -> Result<[ParsedAccount<'static>; 5]> {
         Ok([
             "Assets:Bank:Jawir".try_into()?,
             "Expenses:Dining".try_into()?,
@@ -337,7 +339,7 @@ mod tests {
                 $(
                 assert_eq!(
                     store.accountify(&TxnAccount::$type(vec![0, 1]))?,
-                    Account::$type(vec!["Bank", "Jawir"])
+                    ParsedAccount::$type(vec!["Bank", "Jawir"])
                 );
                 )*
 
