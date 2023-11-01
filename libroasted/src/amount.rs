@@ -113,10 +113,8 @@ impl std::ops::Add<&TxnAmount> for TxnAmount {
     type Output = TxnAmount;
 
     fn add(self, rhs: &TxnAmount) -> Self::Output {
-        let sum: f64;
-
-        if self.currency == rhs.currency {
-            sum = self.nominal + rhs.nominal;
+        let sum = if self.currency == rhs.currency {
+            self.nominal + rhs.nominal
         } else {
             let conversion_unit = rhs
                 .prices
@@ -124,8 +122,8 @@ impl std::ops::Add<&TxnAmount> for TxnAmount {
                 .find(|&item| item.currency == self.currency)
                 .map(|c| c.nominal)
                 .unwrap_or(1f64);
-            sum = self.nominal + (rhs.nominal * conversion_unit);
-        }
+            self.nominal + (rhs.nominal * conversion_unit)
+        };
 
         TxnAmount {
             nominal: sum,
