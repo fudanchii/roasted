@@ -227,9 +227,10 @@ impl Transaction {
             prices: vec![],
         };
 
-        let amount = self.exchanges.iter().fold(amount, |acc: TxnAmount, item| {
-            acc + &item.amount
-        });
+        let amount = self
+            .exchanges
+            .iter()
+            .fold(amount, |acc: TxnAmount, item| acc + &item.amount);
 
         Ok(amount)
     }
