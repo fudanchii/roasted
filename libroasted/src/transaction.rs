@@ -195,7 +195,7 @@ impl Transaction {
 
         match check {
             Check::WithSum => {
-                let sum = self.sum();
+                let sum = self.sum(false);
                 match sum {
                     Ok(v) => {
                         if !v.is_zero() {
@@ -213,24 +213,31 @@ impl Transaction {
         None
     }
 
-    pub fn sum(&self) -> anyhow::Result<TxnAmount> {
-        let amount = TxnAmount {
-            nominal: 0f64,
-            currency: self
-                .exchanges
+    pub fn total_debited(&self) -> anyhow::Result<TxnAmount> {
+        self.sum(true)
+    }
+
+    fn sum(&self, debits_only: bool) -> anyhow::Result<TxnAmount> {
+        let initial_amount = TxnAmount::zero(
+            self.exchanges
                 .iter()
                 .find(|&item| !item.amount_elided)
                 .map(|item| item.amount.currency)
                 .ok_or(anyhow!(
-                    "no valid transaction can be used for currency candidate"
+                    "no valid transaction can be used as default currency"
                 ))?,
-            prices: vec![],
-        };
+        );
 
-        let amount = self
-            .exchanges
-            .iter()
-            .fold(amount, |acc: TxnAmount, item| &acc + &item.amount);
+        let amount = if debits_only {
+            self.exchanges
+                .iter()
+                .filter(|&item| item.amount.nominal > 0f64)
+                .fold(initial_amount, |acc: TxnAmount, item| &acc + &item.amount)
+        } else {
+            self.exchanges
+                .iter()
+                .fold(initial_amount, |acc: TxnAmount, item| &acc + &item.amount)
+        };
 
         Ok(amount)
     }

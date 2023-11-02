@@ -199,11 +199,11 @@ impl Ledger {
 #[cfg(test)]
 mod tests {
     use crate::account::{ParsedAccount, TxnAccount};
-    use crate::amount::{ParsedAmount, TxnAmount};
+    use crate::amount::{ParsedAmount, ParsedPrice, TxnAmount, TxnPrice};
     use crate::ledger::Ledger;
     use crate::parser::{LedgerParser, Rule};
     use crate::statement::Statement;
-    use crate::transaction::{Exchange, ParsedTransaction, TransactionState, TxnHeader};
+    use crate::transaction::{Exchange, ParsedTransaction, TransactionState, TxnHeader, Check};
     use chrono::NaiveDate;
 
     use anyhow::{anyhow, Result};
@@ -385,6 +385,103 @@ mod tests {
         let bookings = ledger.get_at(&tomorrow).ok_or(anyhow!("no daybook"));
 
         assert_eq!("no daybook", format!("{}", bookings.unwrap_err()));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_more_transactions() -> Result<()> {
+        let mut ledger = Ledger::new();
+        let date = NaiveDate::from_ymd_opt(2021, 5, 20).ok_or(anyhow!("invalid date"))?;
+        let asset = ParsedAccount::Assets(vec!["Bank", "SVB"]);
+        let expense1 = ParsedAccount::Expenses(vec!["Monthly", "Splurge"]);
+        let expense2 = ParsedAccount::Expenses(vec!["Travel", "Maldives", "AirPlane"]);
+
+        ledger.process_statement(Statement::OpenAccount(date, asset.clone()))?;
+        ledger.process_statement(Statement::OpenAccount(date, expense1.clone()))?;
+        ledger.process_statement(Statement::OpenAccount(date, expense2.clone()))?;
+
+        let txn_header = TxnHeader {
+            state: TransactionState::Settled,
+            payee: Some("travel-agent"),
+            title: "Maldives Travel",
+        };
+
+        let txn_list = ParsedTransaction {
+            accounts: vec![asset, expense1, expense2],
+            exchanges: vec![
+                None,
+                Some(ParsedAmount {
+                    nominal: 199_f64,
+                    currency: "USD",
+                    price: None,
+                }),
+                Some(ParsedAmount {
+                    nominal: 5500000_f64,
+                    currency: "IDR",
+                    price: Some(ParsedPrice {
+                        nominal: 0.000063,
+                        currency: "USD",
+                    }),
+                }),
+            ],
+        };
+
+        ledger.process_statement(Statement::Transaction(date, txn_header, txn_list))?;
+
+        let bookings = ledger.get_at(&date).ok_or(anyhow!("no daybook"))?;
+
+        assert_eq!(bookings.transactions().len(), 1);
+        assert_eq!(bookings.transactions()[0].exchanges.len(), 3);
+
+        assert_eq!(
+            bookings.transactions()[0].exchanges[0],
+            Exchange {
+                account: TxnAccount::Assets(vec![0, 1]),
+                amount: TxnAmount {
+                    nominal: -545.5_f64,
+                    currency: 0,
+                    prices: vec![],
+                },
+                amount_elided: true,
+            },
+        );
+
+        assert_eq!(
+            bookings.transactions()[0].exchanges[1],
+            Exchange {
+                account: TxnAccount::Expenses(vec![2, 3]),
+                amount: TxnAmount {
+                    nominal: 199_f64,
+                    currency: 0,
+                    prices: vec![],
+                },
+                amount_elided: false,
+            },
+        );
+
+        assert_eq!(
+            bookings.transactions()[0].exchanges[2],
+            Exchange {
+                account: TxnAccount::Expenses(vec![4, 5, 6]),
+                amount: TxnAmount {
+                    nominal: 5_500_000_f64,
+                    currency: 1,
+                    prices: vec![TxnPrice {
+                        nominal: 0.000063,
+                        currency: 0,
+                    }]
+                },
+                amount_elided: false,
+            }
+        );
+
+        assert!(bookings.transactions()[0].errors(Check::WithSum).is_none());
+        assert_eq!(bookings.transactions()[0].total_debited().unwrap(), TxnAmount {
+            nominal: 545.5,
+            currency: 0,
+            prices: vec![],
+        });
 
         Ok(())
     }
