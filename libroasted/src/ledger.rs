@@ -203,7 +203,7 @@ mod tests {
     use crate::ledger::Ledger;
     use crate::parser::{LedgerParser, Rule};
     use crate::statement::Statement;
-    use crate::transaction::{Exchange, ParsedTransaction, TransactionState, TxnHeader, Check};
+    use crate::transaction::{Check, Exchange, ParsedTransaction, TransactionState, TxnHeader};
     use chrono::NaiveDate;
 
     use anyhow::{anyhow, Result};
@@ -477,11 +477,14 @@ mod tests {
         );
 
         assert!(bookings.transactions()[0].errors(Check::WithSum).is_none());
-        assert_eq!(bookings.transactions()[0].total_debited().unwrap(), TxnAmount {
-            nominal: 545.5,
-            currency: 0,
-            prices: vec![],
-        });
+        assert_eq!(
+            bookings.transactions()[0].total_debited().unwrap(),
+            TxnAmount {
+                nominal: 545.5,
+                currency: 0,
+                prices: vec![],
+            }
+        );
 
         Ok(())
     }
