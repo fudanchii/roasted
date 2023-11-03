@@ -203,7 +203,7 @@ impl CurrencyStore {
 
 #[cfg(test)]
 mod tests {
-    use crate::amount::{CurrencyStore, ParsedAmount, ParsedPrice};
+    use crate::amount::{CurrencyStore, ParsedAmount, ParsedPrice, TxnAmount};
     use crate::parser::{LedgerParser, Rule};
     use pest::Parser;
 
@@ -244,7 +244,7 @@ mod tests {
     }
 
     #[test]
-    fn txnify_amount() -> Result<()> {
+    fn txnify_currencyify_amount() -> Result<()> {
         let cs = CurrencyStore::new();
         let txn_amount = cs.amount_txnify(&ParsedAmount {
             nominal: 999999f64,
@@ -259,6 +259,38 @@ mod tests {
         assert_eq!(txn_amount.currency, 0);
         assert_eq!(txn_amount.prices[0].nominal, 1f64);
         assert_eq!(txn_amount.prices[0].currency, 1);
+
+        assert_eq!(cs.currencyify(0), Some("ZWL".to_string()));
+        assert_eq!(cs.currencyify(1), Some("USD".to_string()));
+
+        Ok(())
+    }
+
+    #[test]
+    fn sub_op_txn_amount() -> Result<()> {
+        let cs = CurrencyStore::new();
+        let txn_amount1 = cs.amount_txnify(&ParsedAmount {
+            nominal: 15300f64,
+            currency: "JPY",
+            price: None,
+        });
+        let txn_amount2 = cs.amount_txnify(&ParsedAmount {
+            nominal: 1_259_000f64,
+            currency: "IDR",
+            price: Some(ParsedPrice {
+                nominal: 0.0095,
+                currency: "JPY",
+            }),
+        });
+
+        assert_eq!(
+            &txn_amount1 - &txn_amount2,
+            TxnAmount {
+                nominal: 3_339.5_f64,
+                currency: 0,
+                prices: vec![],
+            }
+        );
 
         Ok(())
     }
