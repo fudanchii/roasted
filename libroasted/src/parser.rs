@@ -63,9 +63,17 @@ mod tests {
         let err = parser::parse_file("not_exist", None)
             .map(|_| ())
             .unwrap_err();
+
+        #[cfg(not(target_os="windows"))]
         assert_eq!(
             format!("{}", err.root_cause()),
             "No such file or directory (os error 2)"
-        )
+        );
+
+        #[cfg(target_os="windows")]
+        assert_eq!(
+            format!("{}", err.root_cause()),
+            "The system cannot find the file specified. (os error 2)"
+        );
     }
 }
