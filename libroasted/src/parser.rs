@@ -64,13 +64,13 @@ mod tests {
             .map(|_| ())
             .unwrap_err();
 
-        #[cfg(not(target_os="windows"))]
+        #[cfg(not(target_os = "windows"))]
         assert_eq!(
             format!("{}", err.root_cause()),
             "No such file or directory (os error 2)"
         );
 
-        #[cfg(target_os="windows")]
+        #[cfg(target_os = "windows")]
         assert_eq!(
             format!("{}", err.root_cause()),
             "The system cannot find the file specified. (os error 2)"
