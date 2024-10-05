@@ -144,7 +144,7 @@ impl Ledger {
         date: NaiveDate,
         target: &ParsedAccount<'_>,
         source: &ParsedAccount<'_>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         let pad_trx = PadTransaction {
             target: self.accounts.txnify(target, date)?,
             source: self.accounts.txnify(source, date)?,
@@ -157,7 +157,7 @@ impl Ledger {
         date: NaiveDate,
         account: &ParsedAccount<'_>,
         amount: &ParsedAmount<'_>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         let balance_assert = BalanceAssertion {
             account: self.accounts.txnify(account, date)?,
             amount: self.currencies.amount_txnify(amount),
@@ -170,7 +170,7 @@ impl Ledger {
         date: NaiveDate,
         header: &TxnHeader<'_>,
         txn: &ParsedTransaction<'_>,
-    ) -> anyhow::Result<Transaction> {
+    ) -> Result<Transaction> {
         let mut accounts: Vec<TxnAccount> = Vec::new();
         let mut exchanges: Vec<Option<TxnAmount>> = Vec::new();
 
@@ -190,7 +190,7 @@ impl Ledger {
         date: NaiveDate,
         header: TxnHeader<'_>,
         txn: ParsedTransaction<'_>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         let transaction = self.new_transaction(date, &header, &txn)?;
         daybook_insert!(self, date, transactions, transaction)
     }

@@ -31,26 +31,3 @@ mod statement;
 mod transaction;
 
 pub use parser::parse;
-
-/// Contextual error for ledger parser.
-/// LedgerError allows simple message to annotate error,
-/// and an additional context data with any type complying
-/// [std::fmt::Debug] constraint.
-#[derive(Debug)]
-pub struct LedgerError<T: std::fmt::Debug>(&'static str, T);
-
-impl LedgerError<()> {
-    /// Create new error without any context.
-    pub fn new(msg: &'static str) -> LedgerError<()> {
-        LedgerError(msg, ())
-    }
-
-    /// Attach context to existing error.
-    pub fn with_context<U: std::fmt::Debug>(self, ctx: U) -> LedgerError<U> {
-        LedgerError(self.0, ctx)
-    }
-}
-
-pub fn err<T: std::fmt::Debug>(ty: T) -> LedgerError<T> {
-    LedgerError("parse error", ty)
-}
