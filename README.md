@@ -15,11 +15,11 @@ Architecture
 Roasted consisted of 3 components:
 
 - libroasted
-  ledger parser, backend for greenflake
-- roasted-greenflake
-  accounting package with plugins
+  Ledger parser, and the foundation data structure for typca.
+- roasted-typca
+  Accounting package with plugins.
 - roasted-cli
-  command line interface for your double book accounting.
+  Command line interface for your double book accounting.
 
 License
 ---
