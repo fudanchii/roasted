@@ -47,7 +47,7 @@ impl DayBook {
     }
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Ledger {
     accounts: AccountStore,
     bookings: BTreeMap<NaiveDate, DayBook>,
@@ -57,7 +57,7 @@ pub struct Ledger {
 
 macro_rules! daybook_insert {
     ($self:ident, $date:ident, $field:ident, $val:expr) => {
-        if let Some(book) = $self.get_mut_at(&$date) {
+        if let Some(book) = $self.get_mut_bookings_on(&$date) {
             book.$field.push($val);
             Ok(())
         } else {
@@ -114,11 +114,11 @@ impl Ledger {
         }
     }
 
-    pub fn get_mut_at(&mut self, date: &NaiveDate) -> Option<&mut DayBook> {
+    pub fn get_mut_bookings_on(&mut self, date: &NaiveDate) -> Option<&mut DayBook> {
         self.bookings.get_mut(date)
     }
 
-    pub fn get_at(&self, date: &NaiveDate) -> Option<&DayBook> {
+    pub fn get_bookings_on(&self, date: &NaiveDate) -> Option<&DayBook> {
         self.bookings.get(date)
     }
 
@@ -233,7 +233,7 @@ mod tests {
         let date = NaiveDate::from_ymd_opt(2021, 5, 20).ok_or(anyhow!("invalid date"))?;
         ledger.process_statement(Statement::Custom(date, vec!["author", "team rocket"]))?;
         assert_eq!(
-            ledger.get_at(&date).unwrap().custom()[0],
+            ledger.get_bookings_on(&date).unwrap().custom()[0],
             vec!["author", "team rocket"]
         );
 
@@ -276,7 +276,7 @@ mod tests {
         ledger.process_statement(Statement::OpenAccount(date, acct_target.clone()))?;
         ledger.process_statement(Statement::Pad(date, acct_target, acct_source))?;
 
-        let bookings = ledger.get_at(&date).ok_or(anyhow!("no daybook"))?;
+        let bookings = ledger.get_bookings_on(&date).ok_or(anyhow!("no daybook"))?;
 
         assert_eq!(bookings.pads().len(), 1);
         assert_eq!(
@@ -303,7 +303,9 @@ mod tests {
 
         ledger.process_statement(Statement::Balance(tomorrow, account.clone(), amount))?;
 
-        let bookings = ledger.get_at(&tomorrow).ok_or(anyhow!("no daybook"))?;
+        let bookings = ledger
+            .get_bookings_on(&tomorrow)
+            .ok_or(anyhow!("no daybook"))?;
 
         assert_eq!(bookings.balance_assertions().len(), 1);
         assert_eq!(
@@ -353,7 +355,7 @@ mod tests {
 
         ledger.process_statement(Statement::Transaction(date, txn_header, txn_list))?;
 
-        let bookings = ledger.get_at(&date).ok_or(anyhow!("no daybook"))?;
+        let bookings = ledger.get_bookings_on(&date).ok_or(anyhow!("no daybook"))?;
 
         assert_eq!(bookings.transactions().len(), 1);
         assert_eq!(
@@ -382,7 +384,9 @@ mod tests {
             },
         );
 
-        let bookings = ledger.get_at(&tomorrow).ok_or(anyhow!("no daybook"));
+        let bookings = ledger
+            .get_bookings_on(&tomorrow)
+            .ok_or(anyhow!("no daybook"));
 
         assert_eq!("no daybook", format!("{}", bookings.unwrap_err()));
 
@@ -429,7 +433,7 @@ mod tests {
 
         ledger.process_statement(Statement::Transaction(date, txn_header, txn_list))?;
 
-        let bookings = ledger.get_at(&date).ok_or(anyhow!("no daybook"))?;
+        let bookings = ledger.get_bookings_on(&date).ok_or(anyhow!("no daybook"))?;
 
         assert_eq!(bookings.transactions().len(), 1);
         assert_eq!(bookings.transactions()[0].exchanges.len(), 3);

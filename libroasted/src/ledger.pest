@@ -1,14 +1,14 @@
-ledger = _{ SOI ~ include? ~ ((option | statement | comment) ~ newline*)+ ~ EOI }
+ledger = _{ SOI ~ (include | option | statement | comment | whitespace | newline)+ ~ EOI }
 
 include = {
-    "include" ~ whitespace* ~ string ~ newline+
+    "include" ~ whitespace* ~ string
 }
 
 option = {
     "option" ~ whitespace* ~ string ~ whitespace* ~ string
 }
 
-comment = _{ whitespace* ~ ";" ~ (!"\n" ~ ANY)* }
+comment = _{ whitespace* ~ ";" ~ (!newline ~ ANY)* }
 
 statement = {
     custom_statement
@@ -32,14 +32,14 @@ statement = {
         date ~ whitespace* ~ "balance" ~ whitespace* ~ account ~ whitespace* ~ amount
     }
 
-transaction = { date ~ whitespace* ~ trx_header ~ trx_list }
+transaction = { date ~ whitespace* ~ trx_header ~ newline ~ trx_list }
     trx_header = { trx_state ~ whitespace* ~ ((trx_payee ~ whitespace* ~ trx_title) | trx_title) }
-    trx_list = { (newline ~ comment* ~ account_statement){2,} }
+    trx_list = { (comment* ~ account_statement ~ newline){2,} }
     trx_state = { ("*" | "!" | "#") }
     trx_title =  { string }
     trx_payee = { string }
     account_statement = {
-        whitespace* ~ account ~ (whitespace+ ~ (amount | amount_with_price)?)? ~ comment*
+        whitespace* ~ account ~ (whitespace+ ~ (amount | amount_with_price)?)? ~ comment?
     }
     amount_with_price = { amount ~ (whitespace* ~ "@" ~ whitespace* ~ amount) }
 

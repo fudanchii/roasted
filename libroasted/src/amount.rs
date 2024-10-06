@@ -153,7 +153,7 @@ impl std::ops::Neg for &TxnAmount {
     }
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct CurrencyStore(Mutex<Vec<String>>);
 
 impl CurrencyStore {
