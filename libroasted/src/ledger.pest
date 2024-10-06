@@ -1,11 +1,11 @@
-ledger = _{ SOI ~ (include | option | statement | comment | whitespace | newline)+ ~ EOI }
+ledger = _{ SOI ~ (include | option | statement | comment | whitespace | newline)* ~ EOI }
 
 include = {
-    "include" ~ whitespace* ~ string
+    "include" ~ whitespace+ ~ string
 }
 
 option = {
-    "option" ~ whitespace* ~ string ~ whitespace* ~ string
+    "option" ~ whitespace+ ~ string ~ whitespace* ~ string
 }
 
 comment = _{ whitespace* ~ ";" ~ (!newline ~ ANY)* }
@@ -20,20 +20,20 @@ statement = {
     | balance_statement
     | transaction
 }
-    custom_statement = { date ~ whitespace* ~ "custom" ~ (whitespace* ~ string)+ }
-    open_statement = { date ~ whitespace* ~ "open" ~ whitespace* ~ account }
-    close_statement = { date ~ whitespace* ~ "close" ~ whitespace* ~ account }
-    commodity_statement = { date ~ whitespace* ~ "commodity" ~ whitespace* ~ currency }
+    custom_statement = { date ~ whitespace+ ~ "custom" ~ (whitespace+ ~ string)+ }
+    open_statement = { date ~ whitespace+ ~ "open" ~ whitespace+ ~ account }
+    close_statement = { date ~ whitespace+ ~ "close" ~ whitespace+ ~ account }
+    commodity_statement = { date ~ whitespace+ ~ "commodity" ~ whitespace+ ~ currency }
     price_statement = {
-        date ~ whitespace* ~ "price" ~ whitespace* ~ currency ~ whitespace* ~ amount
+        date ~ whitespace+ ~ "price" ~ whitespace+ ~ currency ~ whitespace+ ~ amount
     }
-    pad_statement = { date ~ whitespace* ~ "pad" ~ whitespace* ~ account ~ whitespace* ~ account }
+    pad_statement = { date ~ whitespace+ ~ "pad" ~ whitespace+ ~ account ~ whitespace+ ~ account }
     balance_statement = {
-        date ~ whitespace* ~ "balance" ~ whitespace* ~ account ~ whitespace* ~ amount
+        date ~ whitespace+ ~ "balance" ~ whitespace+ ~ account ~ whitespace+ ~ amount
     }
 
-transaction = { date ~ whitespace* ~ trx_header ~ newline ~ trx_list }
-    trx_header = { trx_state ~ whitespace* ~ ((trx_payee ~ whitespace* ~ trx_title) | trx_title) }
+transaction = { date ~ whitespace+ ~ trx_header ~ newline ~ trx_list }
+    trx_header = { trx_state ~ whitespace+ ~ ((trx_payee ~ whitespace+ ~ trx_title) | trx_title) }
     trx_list = { (comment* ~ account_statement ~ newline){2,} }
     trx_state = { ("*" | "!" | "#") }
     trx_title =  { string }
@@ -53,7 +53,7 @@ account = { account_segment ~ account_suffix }
     account_segment = { UPPERCASE_LETTER ~ (ASCII_ALPHANUMERIC | "-")* }
     account_suffix = @{ (":" ~ account_segment)+ }
 
-amount = { amount_value ~ whitespace* ~ currency }
+amount = { amount_value ~ whitespace+ ~ currency }
     amount_value = @{ "-"? ~ number }
     number = @{ integral ~ fraction? }
     integral = { "0" | (ASCII_NONZERO_DIGIT ~ ASCII_DIGIT*) }
