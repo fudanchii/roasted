@@ -151,7 +151,7 @@ impl AccountStore {
     }
 
     pub fn close(&mut self, acc: &ParsedAccount<'_>, at: NaiveDate) -> Result<()> {
-        let txn_acc = self.txnify(acc, at)?;
+        let txn_acc = self.txnify(&at, acc)?;
         match txn_acc {
             TxnAccount::Assets(idxs) => Self::close_account(&mut self.assets, &idxs, at)?,
             TxnAccount::Expenses(idxs) => Self::close_account(&mut self.expenses, &idxs, at)?,
@@ -163,7 +163,7 @@ impl AccountStore {
         Ok(())
     }
 
-    fn txn_account_valid_at(&self, date: NaiveDate, txn_acct: TxnAccount) -> Option<TxnAccount> {
+    fn txn_account_valid_at(&self, date: &NaiveDate, txn_acct: TxnAccount) -> Option<TxnAccount> {
         let activities = match &txn_acct {
             TxnAccount::Assets(idxs) => self.assets.get(idxs),
             TxnAccount::Expenses(idxs) => self.expenses.get(idxs),
@@ -174,12 +174,12 @@ impl AccountStore {
         if let Some(activity) = activities {
             match activity.closed_at {
                 Some(cdate) => {
-                    if activity.opened_at <= date && cdate > date {
+                    if &activity.opened_at <= date && &cdate > date {
                         return Some(txn_acct);
                     }
                 }
                 None => {
-                    if activity.opened_at <= date {
+                    if &activity.opened_at <= date {
                         return Some(txn_acct);
                     }
                 }
@@ -188,7 +188,7 @@ impl AccountStore {
         None
     }
 
-    pub fn txnify(&self, acc: &ParsedAccount<'_>, date: NaiveDate) -> Result<TxnAccount> {
+    pub fn txnify(&self, date: &NaiveDate, acc: &ParsedAccount<'_>) -> Result<TxnAccount> {
         let txn_account = match acc {
             ParsedAccount::Assets(val) => self.lookup_index(val).map(TxnAccount::Assets),
             ParsedAccount::Expenses(val) => self.lookup_index(val).map(TxnAccount::Expenses),
@@ -315,7 +315,7 @@ mod tests {
                 // at given date
                 $(
                 assert_eq!(
-                    store.txnify(&accounts[$idx], $date)?,
+                    store.txnify(&$date, &accounts[$idx])?,
                     TxnAccount::$type(vec!$inner)
                 );
                 )*
@@ -323,7 +323,7 @@ mod tests {
                 // Assert that valid account cannot be used
                 // before the open date
                 assert_eq!(
-                    format!("{}", store.txnify(&accounts[1], date1).unwrap_err()),
+                    format!("{}", store.txnify(&date1, &accounts[1]).unwrap_err()),
                     "account `Expenses:Dining' is not opened at 2021-10-25"
                 );
 
@@ -332,7 +332,7 @@ mod tests {
 
                 // Assert that account cannot be used at further date after
                 // it was closed at the previous date.
-                $(assert!(store.txnify(&accounts[$idx], date4).is_err());)*
+                $(assert!(store.txnify(&date4, &accounts[$idx]).is_err());)*
 
                 // Assert that we can create account from the given transactional account
                 // regardless its state
@@ -347,7 +347,7 @@ mod tests {
                 // before the close date
                 $(
                 assert_eq!(
-                    store.txnify(&accounts[$idx], date2)?,
+                    store.txnify(&date2, &accounts[$idx])?,
                     TxnAccount::$type(vec!$inner)
                 );
                 )*

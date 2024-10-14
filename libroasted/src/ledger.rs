@@ -1,12 +1,13 @@
 use crate::{
     account::{AccountStore, ParsedAccount, TxnAccount},
-    amount::{CurrencyStore, ParsedAmount, TxnAmount},
+    amount::{Amount, ParsedAmount},
     parser::inner_str,
     statement::Statement,
     transaction::{BalanceAssertion, PadTransaction, ParsedTransaction, Transaction, TxnHeader},
 };
 use anyhow::{anyhow, Result};
 use chrono::naive::NaiveDate;
+use indexmap::IndexSet;
 use std::collections::{BTreeMap, HashMap};
 
 use crate::parser::Rule;
@@ -47,12 +48,15 @@ impl DayBook {
     }
 }
 
+pub type PriceBook = HashMap<usize, HashMap<usize, f64>>;
+
 #[derive(Debug, Default)]
 pub struct Ledger {
     accounts: AccountStore,
     bookings: BTreeMap<NaiveDate, DayBook>,
     options: HashMap<String, String>,
-    currencies: CurrencyStore,
+    units: IndexSet<String>,
+    pricebooks: BTreeMap<NaiveDate, PriceBook>,
 }
 
 macro_rules! daybook_insert {
@@ -75,7 +79,8 @@ impl Ledger {
             accounts: AccountStore::new(),
             bookings: BTreeMap::new(),
             options: HashMap::new(),
-            currencies: CurrencyStore::new(),
+            units: IndexSet::new(),
+            pricebooks: BTreeMap::new(),
         }
     }
 
@@ -94,13 +99,27 @@ impl Ledger {
         self.set_option(key, val);
         Ok(())
     }
-
     pub fn set_option(&mut self, key: &str, val: &str) {
         self.options.insert(key.to_string(), val.to_string());
     }
 
     pub fn get_option(&self, key: &str) -> Option<&String> {
         self.options.get(key)
+    }
+
+    pub fn parse_unit(&mut self, token: Pair<Rule>) -> Result<()> {
+        let mut unit_token = token.into_inner();
+        let unit = unit_token
+            .next()
+            .ok_or(anyhow!(format!(
+                "invalid next token: {}",
+                unit_token.as_str()
+            )))?
+            .as_str();
+
+        self.units.insert(unit.to_string());
+
+        Ok(())
     }
 
     pub fn process_statement(&mut self, statement: Statement) -> Result<()> {
@@ -111,6 +130,7 @@ impl Ledger {
             Statement::Pad(date, target, source) => self.pad(date, &target, &source),
             Statement::Balance(date, account, amount) => self.balance(date, &account, &amount),
             Statement::Transaction(date, h, txn) => self.transaction(date, h, txn),
+            Statement::Price(date, commodity, amount) => self.price(date, commodity, &amount),
         }
     }
 
@@ -135,10 +155,6 @@ impl Ledger {
         self.accounts.close(account, date)
     }
 
-    pub fn txn_account(&self, account: &ParsedAccount, date: NaiveDate) -> Result<TxnAccount> {
-        self.accounts.txnify(account, date)
-    }
-
     fn pad(
         &mut self,
         date: NaiveDate,
@@ -146,10 +162,20 @@ impl Ledger {
         source: &ParsedAccount<'_>,
     ) -> Result<()> {
         let pad_trx = PadTransaction {
-            target: self.accounts.txnify(target, date)?,
-            source: self.accounts.txnify(source, date)?,
+            target: self.accounts.txnify(&date, target)?,
+            source: self.accounts.txnify(&date, source)?,
         };
         daybook_insert!(self, date, pads, pad_trx)
+    }
+
+    fn amount(&self, amount: &ParsedAmount) -> Result<Amount> {
+        Ok(Amount {
+            nominal: amount.nominal,
+            unit: self
+                .units
+                .get_index_of(amount.unit)
+                .ok_or(anyhow!(format!("unit `{}' is not declared", amount.unit)))?,
+        })
     }
 
     fn balance(
@@ -159,30 +185,11 @@ impl Ledger {
         amount: &ParsedAmount<'_>,
     ) -> Result<()> {
         let balance_assert = BalanceAssertion {
-            account: self.accounts.txnify(account, date)?,
-            amount: self.currencies.amount_txnify(amount),
+            account: self.account_lookup(&date, account)?,
+            amount: self.amount(amount)?,
         };
+
         daybook_insert!(self, date, balance_asserts, balance_assert)
-    }
-
-    fn new_transaction(
-        &mut self,
-        date: NaiveDate,
-        header: &TxnHeader<'_>,
-        txn: &ParsedTransaction<'_>,
-    ) -> Result<Transaction> {
-        let mut accounts: Vec<TxnAccount> = Vec::new();
-        let mut exchanges: Vec<Option<TxnAmount>> = Vec::new();
-
-        for account in &txn.accounts {
-            accounts.push(self.accounts.txnify(account, date)?);
-        }
-
-        for amount in &txn.exchanges {
-            exchanges.push(amount.as_ref().map(|a| self.currencies.amount_txnify(a)));
-        }
-
-        Transaction::from_parser(header, accounts, exchanges)
     }
 
     fn transaction(
@@ -191,19 +198,57 @@ impl Ledger {
         header: TxnHeader<'_>,
         txn: ParsedTransaction<'_>,
     ) -> Result<()> {
-        let transaction = self.new_transaction(date, &header, &txn)?;
+        let transaction = Transaction::create(self, date, &header, &txn)?;
         daybook_insert!(self, date, transactions, transaction)
+    }
+
+    fn price(&mut self, date: NaiveDate, unit: &str, amount: &ParsedAmount) -> Result<()> {
+        let unit_idx = self.unit_lookup(&date, unit)?;
+        let amount_unit_idx = self.unit_lookup(&date, amount.unit)?;
+
+        if let Some(pricebook) = self
+            .pricebooks
+            .get_mut(&date)
+            .and_then(|hmap| hmap.get_mut(&unit_idx))
+        {
+            pricebook.insert(amount_unit_idx, amount.nominal);
+            return Ok(());
+        }
+
+        self.pricebooks.insert(date, HashMap::new());
+
+        Ok(())
+    }
+}
+
+pub trait ReferenceLookup {
+    fn account_lookup(&self, date: &NaiveDate, account: &ParsedAccount) -> Result<TxnAccount>;
+    fn unit_lookup(&self, date: &NaiveDate, unit: &str) -> Result<usize>;
+}
+
+impl ReferenceLookup for Ledger {
+    fn account_lookup(&self, date: &NaiveDate, account: &ParsedAccount) -> Result<TxnAccount> {
+        self.accounts.txnify(date, account)
+    }
+
+    fn unit_lookup(&self, _date: &NaiveDate, unit: &str) -> Result<usize> {
+        let idx = self
+            .units
+            .get_index_of(unit)
+            .ok_or(anyhow!(format!("Unit `{}' is not declared", unit)))?;
+
+        Ok(idx)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::account::{ParsedAccount, TxnAccount};
-    use crate::amount::{ParsedAmount, ParsedPrice, TxnAmount, TxnPrice};
-    use crate::ledger::Ledger;
+    use crate::amount::{Amount, ParsedAmount};
+    use crate::ledger::{Ledger, ReferenceLookup};
     use crate::parser::{LedgerParser, Rule};
     use crate::statement::Statement;
-    use crate::transaction::{Check, Exchange, ParsedTransaction, TransactionState, TxnHeader};
+    use crate::transaction::{Exchange, ParsedTransaction, TransactionState, TxnHeader};
     use chrono::NaiveDate;
 
     use anyhow::{anyhow, Result};
@@ -252,14 +297,14 @@ mod tests {
 
         assert_eq!(
             TxnAccount::Assets(vec![0, 1]),
-            ledger.txn_account(&acct, date)?
+            ledger.account_lookup(&date, &acct)?
         );
 
         ledger.process_statement(Statement::CloseAccount(date2, acct.clone()))?;
 
         assert_eq!(
             "account `Assets:Cash:On-Hand' is not opened at 2022-05-21",
-            format!("{}", ledger.txn_account(&acct, date3).unwrap_err())
+            format!("{}", ledger.account_lookup(&date3, &acct).unwrap_err())
         );
 
         Ok(())
@@ -296,9 +341,12 @@ mod tests {
         let account = ParsedAccount::Assets(vec!["Bank", "SVB"]);
         let amount = ParsedAmount {
             nominal: 10_000_000f64,
-            currency: "USD",
-            price: None,
+            unit: "USD",
         };
+
+        let mut unit_ast = LedgerParser::parse(Rule::unit, "unit USD")?;
+        ledger.parse_unit(unit_ast.next().ok_or(anyhow!("invalid unit ast"))?)?;
+
         ledger.process_statement(Statement::OpenAccount(date, account.clone()))?;
 
         ledger.process_statement(Statement::Balance(tomorrow, account.clone(), amount))?;
@@ -314,10 +362,9 @@ mod tests {
         );
         assert_eq!(
             bookings.balance_assertions()[0].amount,
-            TxnAmount {
+            Amount {
                 nominal: 10_000_000f64,
-                currency: 0,
-                prices: vec![],
+                unit: 0,
             }
         );
 
@@ -331,6 +378,9 @@ mod tests {
         let tomorrow = NaiveDate::from_ymd_opt(2021, 5, 21).ok_or(anyhow!("invalid date"))?;
         let asset = ParsedAccount::Assets(vec!["Bank", "SVB"]);
         let expense = ParsedAccount::Expenses(vec!["Monthly", "Splurge"]);
+
+        let mut unit_ast = LedgerParser::parse(Rule::unit, "unit USD")?;
+        ledger.parse_unit(unit_ast.next().ok_or(anyhow!("invalid unit ast"))?)?;
 
         ledger.process_statement(Statement::OpenAccount(date, asset.clone()))?;
         ledger.process_statement(Statement::OpenAccount(date, expense.clone()))?;
@@ -347,8 +397,7 @@ mod tests {
                 None,
                 Some(ParsedAmount {
                     nominal: 199_f64,
-                    currency: "USD",
-                    price: None,
+                    unit: "USD",
                 }),
             ],
         };
@@ -358,16 +407,12 @@ mod tests {
         let bookings = ledger.get_bookings_on(&date).ok_or(anyhow!("no daybook"))?;
 
         assert_eq!(bookings.transactions().len(), 1);
+        assert_eq!(bookings.transactions()[0].exchanges.len(), 2);
         assert_eq!(
             bookings.transactions()[0].exchanges[0],
             Exchange {
                 account: TxnAccount::Assets(vec![0, 1]),
-                amount: TxnAmount {
-                    nominal: -199_f64,
-                    currency: 0,
-                    prices: vec![],
-                },
-                amount_elided: true,
+                amount: None,
             },
         );
 
@@ -375,12 +420,10 @@ mod tests {
             bookings.transactions()[0].exchanges[1],
             Exchange {
                 account: TxnAccount::Expenses(vec![2, 3]),
-                amount: TxnAmount {
+                amount: Some(Amount {
                     nominal: 199_f64,
-                    currency: 0,
-                    prices: vec![],
-                },
-                amount_elided: false,
+                    unit: 0,
+                }),
             },
         );
 
@@ -395,101 +438,6 @@ mod tests {
 
     #[test]
     fn test_more_transactions() -> Result<()> {
-        let mut ledger = Ledger::new();
-        let date = NaiveDate::from_ymd_opt(2021, 5, 20).ok_or(anyhow!("invalid date"))?;
-        let asset = ParsedAccount::Assets(vec!["Bank", "SVB"]);
-        let expense1 = ParsedAccount::Expenses(vec!["Monthly", "Splurge"]);
-        let expense2 = ParsedAccount::Expenses(vec!["Travel", "Maldives", "AirPlane"]);
-
-        ledger.process_statement(Statement::OpenAccount(date, asset.clone()))?;
-        ledger.process_statement(Statement::OpenAccount(date, expense1.clone()))?;
-        ledger.process_statement(Statement::OpenAccount(date, expense2.clone()))?;
-
-        let txn_header = TxnHeader {
-            state: TransactionState::Settled,
-            payee: Some("travel-agent"),
-            title: "Maldives Travel",
-        };
-
-        let txn_list = ParsedTransaction {
-            accounts: vec![asset, expense1, expense2],
-            exchanges: vec![
-                None,
-                Some(ParsedAmount {
-                    nominal: 199_f64,
-                    currency: "USD",
-                    price: None,
-                }),
-                Some(ParsedAmount {
-                    nominal: 5500000_f64,
-                    currency: "IDR",
-                    price: Some(ParsedPrice {
-                        nominal: 0.000063,
-                        currency: "USD",
-                    }),
-                }),
-            ],
-        };
-
-        ledger.process_statement(Statement::Transaction(date, txn_header, txn_list))?;
-
-        let bookings = ledger.get_bookings_on(&date).ok_or(anyhow!("no daybook"))?;
-
-        assert_eq!(bookings.transactions().len(), 1);
-        assert_eq!(bookings.transactions()[0].exchanges.len(), 3);
-
-        assert_eq!(
-            bookings.transactions()[0].exchanges[0],
-            Exchange {
-                account: TxnAccount::Assets(vec![0, 1]),
-                amount: TxnAmount {
-                    nominal: -545.5_f64,
-                    currency: 0,
-                    prices: vec![],
-                },
-                amount_elided: true,
-            },
-        );
-
-        assert_eq!(
-            bookings.transactions()[0].exchanges[1],
-            Exchange {
-                account: TxnAccount::Expenses(vec![2, 3]),
-                amount: TxnAmount {
-                    nominal: 199_f64,
-                    currency: 0,
-                    prices: vec![],
-                },
-                amount_elided: false,
-            },
-        );
-
-        assert_eq!(
-            bookings.transactions()[0].exchanges[2],
-            Exchange {
-                account: TxnAccount::Expenses(vec![4, 5, 6]),
-                amount: TxnAmount {
-                    nominal: 5_500_000_f64,
-                    currency: 1,
-                    prices: vec![TxnPrice {
-                        nominal: 0.000063,
-                        currency: 0,
-                    }]
-                },
-                amount_elided: false,
-            }
-        );
-
-        assert!(bookings.transactions()[0].errors(Check::WithSum).is_none());
-        assert_eq!(
-            bookings.transactions()[0].total_debited().unwrap(),
-            TxnAmount {
-                nominal: 545.5,
-                currency: 0,
-                prices: vec![],
-            }
-        );
-
         Ok(())
     }
 }

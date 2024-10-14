@@ -1,47 +1,36 @@
-ledger = _{ SOI ~ (include | option | statement | comment | whitespace | newline)* ~ EOI }
+ledger = _{ SOI ~ (include | option | unit | statement | comment | whitespace | newline)* ~ EOI }
 
-include = {
-    "include" ~ whitespace+ ~ string
-}
-
-option = {
-    "option" ~ whitespace+ ~ string ~ whitespace* ~ string
-}
+include = { "include" ~ whitespace+ ~ string }
+option =  { "option"  ~ whitespace+ ~ string ~ whitespace* ~ string }
+unit =    { "unit"    ~ whitespace+ ~ currency }
 
 comment = _{ whitespace* ~ ";" ~ (!newline ~ ANY)* }
 
-statement = {
-    custom_statement
+statement = { date ~ whitespace+ ~
+    (custom_statement
     | open_statement
     | close_statement
-    | commodity_statement
     | price_statement
     | pad_statement
     | balance_statement
-    | transaction
+    | transaction)
 }
-    custom_statement = { date ~ whitespace+ ~ "custom" ~ (whitespace+ ~ string)+ }
-    open_statement = { date ~ whitespace+ ~ "open" ~ whitespace+ ~ account }
-    close_statement = { date ~ whitespace+ ~ "close" ~ whitespace+ ~ account }
-    commodity_statement = { date ~ whitespace+ ~ "commodity" ~ whitespace+ ~ currency }
-    price_statement = {
-        date ~ whitespace+ ~ "price" ~ whitespace+ ~ currency ~ whitespace+ ~ amount
-    }
-    pad_statement = { date ~ whitespace+ ~ "pad" ~ whitespace+ ~ account ~ whitespace+ ~ account }
-    balance_statement = {
-        date ~ whitespace+ ~ "balance" ~ whitespace+ ~ account ~ whitespace+ ~ amount
-    }
+    custom_statement =  { "custom" ~ (whitespace+ ~ string)+ }
+    open_statement =    { "open"   ~ whitespace+ ~ account }
+    close_statement =   { "close"  ~ whitespace+ ~ account }
+    price_statement =   { "price"  ~ whitespace+ ~ currency ~ whitespace+ ~ amount }
+    pad_statement =     { "pad"    ~ whitespace+ ~ account ~ whitespace+ ~ account }
+    balance_statement = { "balance" ~ whitespace+ ~ account ~ whitespace+ ~ amount }
 
-transaction = { date ~ whitespace+ ~ trx_header ~ newline ~ trx_list }
+transaction = { trx_header ~ newline ~ trx_list }
     trx_header = { trx_state ~ whitespace+ ~ ((trx_payee ~ whitespace+ ~ trx_title) | trx_title) }
     trx_list = { (comment* ~ account_statement ~ newline){2,} }
     trx_state = { ("*" | "!" | "#") }
     trx_title =  { string }
     trx_payee = { string }
     account_statement = {
-        whitespace* ~ account ~ (whitespace+ ~ (amount | amount_with_price)?)? ~ comment?
+        whitespace* ~ account ~ (whitespace+ ~ amount?)? ~ comment?
     }
-    amount_with_price = { amount ~ (whitespace* ~ "@" ~ whitespace* ~ amount) }
 
 date = @{ year ~ "-" ~ month ~ "-" ~ day_of_month }
     year = { ASCII_NONZERO_DIGIT ~ ASCII_DIGIT{,3} }

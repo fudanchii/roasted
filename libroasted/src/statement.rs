@@ -2,6 +2,7 @@ use crate::account::ParsedAccount;
 use crate::amount::ParsedAmount;
 use crate::parser::{inner_str, Rule};
 use crate::transaction::{ParsedTransaction, TxnHeader};
+use anyhow::{anyhow, Result};
 use chrono::NaiveDate;
 use pest::iterators::Pair;
 
@@ -15,22 +16,20 @@ pub enum Statement<'s> {
     Pad(NaiveDate, ParsedAccount<'s>, ParsedAccount<'s>),
     Balance(NaiveDate, ParsedAccount<'s>, ParsedAmount<'s>),
     Transaction(NaiveDate, TxnHeader<'s>, ParsedTransaction<'s>),
+    Price(NaiveDate, &'s str, ParsedAmount<'s>),
 }
 
 impl<'s> TryFrom<Pair<'s, Rule>> for Statement<'s> {
     type Error = anyhow::Error;
 
-    fn try_from(pair: Pair<'s, Rule>) -> Result<Self, Self::Error> {
-        let inner = pair.into_inner().next().ok_or(anyhow::Error::msg(
-            "invalid next token, expected statements",
-        ))?;
-        Self::into_statement(inner)
+    fn try_from(pair: Pair<'s, Rule>) -> Result<Self> {
+        Self::into_statement(pair)
     }
 }
 
 macro_rules! parse_next {
     ($parser:ident, $pairs:ident) => {
-        $parser::parse($pairs.next().ok_or(anyhow::Error::msg(format!(
+        $parser::parse($pairs.next().ok_or(anyhow!(format!(
             "invalid next token, expected {}",
             stringify!($parser)
         )))?)?
@@ -40,14 +39,19 @@ macro_rules! parse_next {
 pub(crate) use parse_next;
 
 impl<'s> Statement<'s> {
-    fn into_statement(statement: Pair<'s, Rule>) -> anyhow::Result<Self> {
-        let tag = statement.as_rule();
+    fn into_statement(statement: Pair<'s, Rule>) -> Result<Self> {
         let mut pairs = statement.into_inner();
         let datestr = pairs
             .next()
-            .ok_or(anyhow::Error::msg("invalid next token, expected date str"))?
+            .ok_or(anyhow!("Statement: invalid next token, expected date str"))?
             .as_str();
         let date = NaiveDate::parse_from_str(datestr, "%Y-%m-%d")?;
+        let statement_pair = pairs
+            .next()
+            .ok_or(anyhow!("Statement: invalid statement"))?;
+        let tag = statement_pair.as_rule();
+
+        let mut pairs = statement_pair.into_inner();
 
         let stmt = match tag {
             Rule::custom_statement => Self::Custom(date, pairs.map(inner_str).collect()),
@@ -67,6 +71,16 @@ impl<'s> Statement<'s> {
                 date,
                 parse_next!(TxnHeader, pairs),
                 parse_next!(ParsedTransaction, pairs),
+            ),
+            Rule::price_statement => Self::Price(
+                date,
+                pairs
+                    .next()
+                    .ok_or(anyhow!(
+                        "Statement: invalid next token, expected `currency' str"
+                    ))?
+                    .as_str(),
+                parse_next!(ParsedAmount, pairs),
             ),
             _ => unreachable!(),
         };
@@ -167,8 +181,7 @@ mod tests {
                 ParsedAccount::Assets(vec!["Cash", "OnHand"]),
                 ParsedAmount {
                     nominal: 65750.55f64,
-                    currency: "USD",
-                    price: None,
+                    unit: "USD",
                 }
             )
         );
@@ -203,8 +216,7 @@ mod tests {
                         None,
                         Some(ParsedAmount {
                             nominal: 50f64,
-                            currency: "USD",
-                            price: None,
+                            unit: "USD",
                         }),
                     ],
                 }

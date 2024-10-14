@@ -1,13 +1,15 @@
 use crate::parser::{inner_str, Rule};
 use crate::{
     account::{ParsedAccount, TxnAccount},
-    amount::{ParsedAmount, TxnAmount},
+    amount::{Amount, ParsedAmount},
+    ledger::ReferenceLookup,
     statement,
 };
 
+use chrono::NaiveDate;
 use pest::iterators::Pair;
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Result};
 
 #[derive(Debug, PartialEq)]
 pub struct TxnHeader<'th> {
@@ -17,7 +19,7 @@ pub struct TxnHeader<'th> {
 }
 
 impl<'th> TxnHeader<'th> {
-    pub fn parse(token: Pair<'th, Rule>) -> anyhow::Result<TxnHeader<'th>> {
+    pub fn parse(token: Pair<'th, Rule>) -> Result<TxnHeader<'th>> {
         let mut token = token.into_inner();
 
         let state = token
@@ -66,7 +68,7 @@ pub struct ParsedTransaction<'tl> {
 }
 
 impl<'tl> ParsedTransaction<'tl> {
-    pub fn parse(token: Pair<'tl, Rule>) -> anyhow::Result<ParsedTransaction<'tl>> {
+    pub fn parse(token: Pair<'tl, Rule>) -> Result<ParsedTransaction<'tl>> {
         let pairs = token.into_inner();
         let mut txnlist = ParsedTransaction {
             accounts: Vec::new(),
@@ -109,8 +111,7 @@ pub enum TransactionState {
 #[derive(Debug, PartialEq)]
 pub struct Exchange {
     pub account: TxnAccount,
-    pub amount: TxnAmount,
-    pub amount_elided: bool,
+    pub amount: Option<Amount>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -121,64 +122,33 @@ pub struct Transaction {
     pub exchanges: Vec<Exchange>,
 }
 
-pub enum Check {
-    WithSum,
-    WithoutSum,
-}
-
-#[derive(Debug)]
-pub enum TxnError {
-    Unbalanced,
-    NotZeroSum,
-    Other(anyhow::Error),
-}
-
 impl Transaction {
-    pub fn from_parser(
-        header: &TxnHeader<'_>,
-        accounts: Vec<TxnAccount>,
-        amounts: Vec<Option<TxnAmount>>,
-    ) -> anyhow::Result<Transaction> {
+    pub fn create<RL: ReferenceLookup>(
+        ledger: &RL,
+        date: NaiveDate,
+        header: &TxnHeader,
+        parsed_trx: &ParsedTransaction,
+    ) -> Result<Transaction> {
         let mut exchanges = vec![];
-        let mut elided_position: Option<usize> = None;
-        let mut total: Option<TxnAmount> = None;
 
-        if amounts.iter().filter(|&a| a.is_none()).count() > 1 {
-            return Err(anyhow!("only 1 account can has its amount elided"));
+        if parsed_trx.exchanges.iter().filter(|&a| a.is_none()).count() > 1 {
+            return Err(anyhow!(
+                "Trx Exchange: only 1 account can has its amount elided"
+            ));
         }
 
-        for (x, account) in accounts.iter().enumerate() {
-            if amounts[x].is_none() {
-                elided_position.replace(x);
-                continue;
-            }
-
+        for (idx, account) in parsed_trx.accounts.iter().enumerate() {
             exchanges.push(Exchange {
-                account: account.clone(),
-                amount: amounts[x].as_ref().unwrap().clone(),
-                amount_elided: false,
-            });
-
-            match total.as_ref() {
-                None => {
-                    total.replace(amounts[x].as_ref().unwrap().clone());
-                }
-                Some(v) => {
-                    total = Some(v + amounts[x].as_ref().unwrap());
-                }
-            };
-        }
-
-        if let Some(pos) = elided_position {
-            exchanges.insert(
-                pos,
-                Exchange {
-                    account: accounts[pos].clone(),
-                    amount: -total.as_ref().unwrap(),
-                    amount_elided: true,
+                account: ledger.account_lookup(&date, account)?,
+                amount: match &parsed_trx.exchanges[idx] {
+                    None => None,
+                    Some(amount) => Some(Amount {
+                        nominal: amount.nominal,
+                        unit: ledger.unit_lookup(&date, amount.unit)?,
+                    }),
                 },
-            );
-        };
+            });
+        }
 
         Ok(Transaction {
             state: header.state,
@@ -187,66 +157,12 @@ impl Transaction {
             exchanges,
         })
     }
-
-    pub fn errors(&self, check: Check) -> Option<TxnError> {
-        if self.exchanges.len() <= 1 {
-            return Some(TxnError::Unbalanced);
-        }
-
-        match check {
-            Check::WithSum => {
-                let sum = self.sum(false);
-                match sum {
-                    Ok(v) => {
-                        if !v.is_zero() {
-                            return Some(TxnError::NotZeroSum);
-                        }
-                    }
-                    Err(e) => {
-                        return Some(TxnError::Other(e));
-                    }
-                }
-            }
-            Check::WithoutSum => {}
-        }
-
-        None
-    }
-
-    pub fn total_debited(&self) -> anyhow::Result<TxnAmount> {
-        self.sum(true)
-    }
-
-    fn sum(&self, debits_only: bool) -> anyhow::Result<TxnAmount> {
-        let initial_amount = TxnAmount::zero(
-            self.exchanges
-                .iter()
-                .find(|&item| !item.amount_elided)
-                .map(|item| item.amount.currency)
-                .ok_or(anyhow!(
-                    "no valid transaction can be used as default currency"
-                ))?,
-        );
-
-        let amount = if debits_only {
-            self.exchanges
-                .iter()
-                .filter(|&item| item.amount.nominal > 0f64)
-                .fold(initial_amount, |acc: TxnAmount, item| &acc + &item.amount)
-        } else {
-            self.exchanges
-                .iter()
-                .fold(initial_amount, |acc: TxnAmount, item| &acc + &item.amount)
-        };
-
-        Ok(amount)
-    }
 }
 
 #[derive(Debug)]
 pub struct BalanceAssertion {
     pub account: TxnAccount,
-    pub amount: TxnAmount,
+    pub amount: Amount,
 }
 
 #[derive(Debug)]

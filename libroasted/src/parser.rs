@@ -40,6 +40,7 @@ pub fn parse(input: &str, carried_ledger: Option<Ledger>) -> Result<Ledger> {
             }
             Rule::option => ledger.parse_option(statement)?,
             Rule::statement => ledger.process_statement(statement.try_into()?)?,
+            Rule::unit => ledger.parse_unit(statement)?,
             Rule::EOI => break,
             _ => {
                 return Err(anyhow!(format!(
@@ -62,6 +63,7 @@ pub fn inner_str(token: Pair<Rule>) -> &str {
 mod tests {
     use crate::{
         account::{ParsedAccount, TxnAccount},
+        ledger::ReferenceLookup,
         parser,
     };
     use anyhow::{anyhow, Result};
@@ -71,6 +73,8 @@ mod tests {
     fn test_ledger_content() -> Result<()> {
         let ledger = parser::parse(
             r#"
+unit USD
+
 2014-01-01 open Assets:Saving:Bank-M
 2014-01-01 open Assets:Saving:Bank-A
 2014-01-01 open Assets:Saving:Bank-B
@@ -124,7 +128,7 @@ mod tests {
 
                     assert_eq!(
                         ledger
-                            .txn_account(&ParsedAccount::$acctype($accsuffix), date)
+                            .account_lookup(&date, &ParsedAccount::$acctype($accsuffix))
                             .unwrap(),
                         TxnAccount::$acctype($accsuffixnum),
                     );
